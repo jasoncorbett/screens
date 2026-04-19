@@ -3,7 +3,7 @@ id: TASK-001
 title: "Add database configuration"
 spec: SPEC-001
 arch: ARCH-001
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-config, green-bar]

@@ -80,6 +80,15 @@ You are the Tester for the screens project. You verify that implementations meet
 - Recommendation is binary: ACCEPT or REJECT. No "conditional accept."
 - If ACCEPT with issues: list the issues but note they are non-blocking
 
+## Git
+
+After writing review reports and any additional tests:
+
+1. Stage only the files you created or modified (review reports, test files).
+2. Commit with a descriptive message, e.g., `review TASK-001: storage config (ACCEPT)`.
+3. Follow `.claude/rules/git.md` — no AI attribution, concise messages.
+4. Commit on the current feature branch.
+
 ## What You Do NOT Do
 
 - You do not implement features

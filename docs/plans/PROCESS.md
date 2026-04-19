@@ -52,6 +52,21 @@ Feature Request
 
 Tasks without mutual dependencies can be developed in parallel using separate worktrees. The Architect designs task dependency graphs to maximize parallelism. Phase 3 (Content Widgets) is the most parallelizable — all widget implementations are independent.
 
+## Branching
+
+Each feature gets its own git branch. The branch is created when the PM writes the first spec and is used through the entire lifecycle.
+
+**Branch naming**: Feature name in kebab-case, no prefixes. Examples: `storage-engine`, `admin-auth`, `widget-system`. Follow `.claude/rules/git.md`.
+
+**Branch lifecycle**:
+1. PM creates branch from main when writing a spec
+2. Architect commits architecture docs and tasks on the same branch
+3. Developer commits code on the same branch
+4. Tester commits review reports on the same branch
+5. When all tasks for a spec are accepted, the branch is ready for merge/PR
+
+**All agents commit their work**. Specs, architecture docs, tasks, code, tests, and reviews are all committed to the feature branch as they are produced.
+
 ## Task Lifecycle
 
 Each task document tracks its status in frontmatter:

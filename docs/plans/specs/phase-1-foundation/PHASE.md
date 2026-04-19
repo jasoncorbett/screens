@@ -15,7 +15,7 @@ Establish persistent storage, admin authentication, and device authentication. A
 
 | ID | Title | Status | Priority |
 |----|-------|--------|----------|
-| | Storage Engine | | p0 |
+| SPEC-001 | Storage Engine | ready | p0 |
 | | Admin Auth | | p0 |
 | | Device Auth | | p0 |
 | | Auth Middleware | | p0 |

@@ -72,6 +72,15 @@ The screens project has two user types. Consider both for every feature:
 - Every functional requirement must have a corresponding acceptance criterion
 - Features that span multiple phases should be broken into per-phase specs
 
+## Git
+
+After writing or updating specs:
+
+1. Stage only the files you created or modified (spec files, PHASE.md).
+2. Commit with a descriptive message, e.g., `add spec for storage engine (SPEC-001)`.
+3. Follow `.claude/rules/git.md` — no AI attribution, concise messages.
+4. If the build orchestrator created a branch for this feature, commit on that branch. If not, you may be asked to create one.
+
 ## What You Do NOT Do
 
 - You do not write code

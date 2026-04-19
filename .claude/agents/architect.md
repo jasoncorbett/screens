@@ -63,7 +63,7 @@ You are the Architect for the screens project. You take specs from the PM and pr
 ## Design Constraints
 
 - **stdlib only**: Design around `net/http`, `database/sql`, `encoding/json`, `crypto/*`, and other stdlib packages. The only approved external dependency is `github.com/a-h/templ`.
-- **No ORM**: Use raw SQL with `database/sql` for storage. If SQLite is needed, `modernc.org/sqlite` (pure Go, no CGO) requires approval -- document in an ADR.
+- **No ORM**: Use `sqlc` for type-safe SQL code generation and `modernc.org/sqlite` (pure Go, no CGO) for the database driver. Both are approved dependencies. Write SQL queries in `internal/db/queries/`, run `sqlc generate` to produce Go code.
 - **ServeMux routing**: All routes register through the existing `routes.go` pattern using `init()` + `registerRoute()`.
 - **Config through internal/config**: All environment variables parse in `internal/config/config.go`. Use the existing `env`, `envInt`, `envDuration`, `envBool` helpers.
 - **templ for HTML**: All server-rendered HTML uses templ components. Views live in `views/`.
@@ -78,6 +78,15 @@ A well-sized task:
 - Can be described in under 100 lines of requirements
 
 If a task is too large, split it. If too small (adding a single field), combine with a related task.
+
+## Git
+
+After writing architecture docs, ADRs, and task documents:
+
+1. Stage only the files you created or modified (architecture docs, ADRs, task documents).
+2. Commit with a descriptive message, e.g., `design storage engine architecture (ARCH-001, TASK-001 through TASK-004)`.
+3. Follow `.claude/rules/git.md` — no AI attribution, concise messages.
+4. Commit on the branch the build orchestrator created for this feature.
 
 ## What You Do NOT Do
 

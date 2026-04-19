@@ -51,6 +51,7 @@ When introducing a new cross-cutting convention, add it as `.claude/rules/<topic
 - Return errors; never panic in request paths. Accept `context.Context` as the first parameter on I/O or cancellable functions.
 - Never log secrets, auth headers, or PII. Never commit `.env` or credential files.
 - Standard library only — no third-party dependencies without explicit approval.
+- Approved exceptions: `modernc.org/sqlite` (pure-Go SQLite driver), `github.com/a-h/templ` (HTML templating), `sqlc` (SQL code generation build tool).
 
 ## Before committing
 
@@ -88,6 +89,7 @@ Reusable skill definitions live in `.claude/skills/`:
 - [add-widget](skills/add-widget/SKILL.md) — scaffold widget type implementations
 - [add-migration](skills/add-migration/SKILL.md) — add database schema migrations
 - [green-bar](skills/green-bar/SKILL.md) — pre-commit checks (gofmt, vet, build, test)
+- [build](skills/build/SKILL.md) — orchestrate the development loop (/build next, /build status, /build spec, etc.)
 
 ### Planning Documents
 

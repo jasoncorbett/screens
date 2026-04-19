@@ -1,0 +1,90 @@
+# Screens Development Process
+
+This document defines the development workflow for the screens project. All task documents reference this file. Agents follow the workflow described here.
+
+## Agent Roles
+
+| Agent     | Input                       | Output                          | Definition              |
+|-----------|-----------------------------|---------------------------------|-------------------------|
+| PM        | Feature request / requirement | Spec in `docs/plans/specs/`    | `.claude/agents/pm.md`  |
+| Architect | Spec                        | Architecture doc + task docs    | `.claude/agents/architect.md` |
+| Developer | Task document               | Code + tests                    | `.claude/agents/developer.md` |
+| Tester    | Spec + implementation       | Review report                   | `.claude/agents/tester.md` |
+
+## Workflow
+
+```
+Feature Request
+      |
+      v
+  PM Agent -----> spec-<name>.md
+      |
+      v
+  Architect -----> arch-<name>.md + task-NNN-*.md
+      |
+      v
+  Developer -----> code + tests (per task, in dependency order)
+      |
+      v
+  Tester -----> review-task-NNN.md
+      |
+      v
+  PM reviews -----> ACCEPT (task done) or REJECT (developer revises)
+```
+
+### Concrete Invocation Sequence
+
+1. **Start a feature**: Invoke the PM agent with the requirement text. The PM reads existing specs and the roadmap, then writes a spec to `docs/plans/specs/<phase>/spec-<name>.md` and updates the phase's `PHASE.md`.
+
+2. **Design**: Invoke the Architect agent with the spec path. The Architect reads the spec, codebase, and existing architecture docs, then writes an architecture document to `docs/plans/architecture/<phase>/arch-<name>.md` and breaks the work into task documents in `docs/plans/tasks/<phase>/task-NNN-<name>.md`. ADRs go to `docs/plans/architecture/decisions/` when trade-offs need recording.
+
+3. **Implement**: For each task in dependency order, invoke the Developer agent with the task path. The Developer reads the task, referenced architecture doc, and project rules, then implements, runs green-bar, updates task status to `review`, and commits.
+
+4. **Validate**: After each task implementation, invoke the Tester agent with the task path. The Tester reads the spec's acceptance criteria and the implementation, writes additional tests if needed, runs the full suite, and produces a review report in `docs/plans/reviews/review-task-NNN.md`.
+
+5. **Accept or reject**: Read the tester's report. If ACCEPT, mark the task `done` — this unblocks dependent tasks. If REJECT, the Developer fixes the issues and re-submits.
+
+6. **Repeat** steps 3-5 until all tasks for the spec are `done`.
+
+7. **Close the spec**: The PM marks the spec as `accepted` when all its acceptance criteria pass.
+
+### Parallel Work
+
+Tasks without mutual dependencies can be developed in parallel using separate worktrees. The Architect designs task dependency graphs to maximize parallelism. Phase 3 (Content Widgets) is the most parallelizable — all widget implementations are independent.
+
+## Task Lifecycle
+
+Each task document tracks its status in frontmatter:
+
+| Status        | Meaning                                          |
+|---------------|--------------------------------------------------|
+| `draft`       | Architect is still writing the task               |
+| `ready`       | Available for a Developer to pick up              |
+| `in-progress` | Developer is working on it                        |
+| `review`      | Implementation complete, awaiting Tester          |
+| `done`        | Tester approved, acceptance criteria met          |
+| `blocked`     | Waiting on a prerequisite task or external factor |
+
+## Conventions
+
+All agents MUST:
+
+1. Read `.claude/CLAUDE.md` before starting work
+2. Read `.claude/rules/` files relevant to their changes
+3. Follow the git conventions in `.claude/rules/git.md`
+4. Run green-bar checks before considering code work complete
+5. Never add third-party dependencies without explicit approval
+6. Reference task IDs (e.g., TASK-001) when discussing work
+
+## File Naming
+
+| Document      | Pattern                          | Location                              |
+|---------------|----------------------------------|---------------------------------------|
+| Specs         | `spec-<kebab-case>.md`           | `docs/plans/specs/<phase>/`           |
+| Architecture  | `arch-<kebab-case>.md`           | `docs/plans/architecture/<phase>/`    |
+| Tasks         | `task-NNN-<kebab-case>.md`       | `docs/plans/tasks/<phase>/`           |
+| Reviews       | `review-task-NNN.md`             | `docs/plans/reviews/`                 |
+| ADRs          | `adr-NNN-<kebab-case>.md`        | `docs/plans/architecture/decisions/`  |
+| Phase overview| `PHASE.md`                       | `docs/plans/specs/<phase>/`           |
+
+Task numbers (NNN) are zero-padded and globally unique across all phases.

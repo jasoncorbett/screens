@@ -1,0 +1,46 @@
+
+package views
+
+templ demoPage() {
+	@layout("screens") {
+		<div class="hero">
+			<h1>screens</h1>
+			<span
+				class="version-badge"
+				hx-get="/api/v1/version"
+				hx-trigger="load"
+				hx-swap="innerHTML"
+			>
+				&hellip;
+			</span>
+			
+			<p class="description">A screen dashboard style management service</p>
+			
+		</div>
+
+		<div class="card">
+			<h2>Server Status</h2>
+			<div
+				id="status"
+				hx-get="/views/status"
+				hx-trigger="load, every 5s"
+				hx-swap="innerHTML"
+			>
+				<span class="text-muted">connecting&hellip;</span>
+			</div>
+		</div>
+
+		<footer class="footer">
+			Powered by Go, htmx, and templ
+		</footer>
+	}
+}
+
+templ statusFragment(serverTime string) {
+	<div class="status-row">
+		<span class="dot ok"></span>
+		<span>running</span>
+		<span class="text-muted">{ serverTime }</span>
+	</div>
+}
+

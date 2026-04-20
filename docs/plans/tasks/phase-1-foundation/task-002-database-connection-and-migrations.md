@@ -3,7 +3,7 @@ id: TASK-002
 title: "Database connection and migration runner"
 spec: SPEC-001
 arch: ARCH-001
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-001]
 skills: [add-migration, green-bar]

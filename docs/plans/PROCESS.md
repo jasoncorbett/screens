@@ -4,45 +4,39 @@ This document defines the development workflow for the screens project. All task
 
 ## Agent Roles
 
-| Agent     | Input                       | Output                          | Definition              |
-|-----------|-----------------------------|---------------------------------|-------------------------|
-| PM        | Feature request / requirement | Spec in `docs/plans/specs/`    | `.claude/agents/pm.md`  |
-| Architect | Spec                        | Architecture doc + task docs    | `.claude/agents/architect.md` |
-| Developer | Task document               | Code + tests                    | `.claude/agents/developer.md` |
-| Tester    | Spec + implementation       | Review report                   | `.claude/agents/tester.md` |
+| Agent     | Input                       | Output                                     | Definition              |
+|-----------|-----------------------------|--------------------------------------------|-------------------------|
+| Architect | Feature name from roadmap   | Spec + architecture doc + task docs         | `.claude/agents/architect.md` |
+| Developer | Task document               | Code + tests                                | `.claude/agents/developer.md` |
+| Tester    | Task + implementation       | Adversarial review report + edge case tests | `.claude/agents/tester.md` |
 
 ## Workflow
 
 ```
-Feature Request
+Feature from Roadmap
       |
       v
-  PM Agent -----> spec-<name>.md
-      |
-      v
-  Architect -----> arch-<name>.md + task-NNN-*.md
+  Architect -----> spec + arch + task-NNN-*.md  (one pass)
       |
       v
   Developer -----> code + tests (per task, in dependency order)
       |
       v
-  Tester -----> review-task-NNN.md
+  Tester -----> adversarial review + edge case tests
       |
       v
-  PM reviews -----> ACCEPT (task done) or REJECT (developer revises)
+  User reviews -----> ACCEPT (task done) or REJECT (developer revises)
 ```
 
 ### Concrete Invocation Sequence
 
-1. **Start a feature**: Invoke the PM agent with the requirement text. The PM reads existing specs and the roadmap, then writes a spec to `docs/plans/specs/<phase>/spec-<name>.md` and updates the phase's `PHASE.md`.
+1. **Design a feature**: Invoke the Architect agent with the feature name. The Architect reads the roadmap entry, writes a spec with acceptance criteria, designs the architecture, and breaks the work into task documents. All outputs are committed in one pass.
 
-2. **Design**: Invoke the Architect agent with the spec path. The Architect reads the spec, codebase, and existing architecture docs, then writes an architecture document to `docs/plans/architecture/<phase>/arch-<name>.md` and breaks the work into task documents in `docs/plans/tasks/<phase>/task-NNN-<name>.md`. ADRs go to `docs/plans/architecture/decisions/` when trade-offs need recording.
+2. **Implement**: For each task in dependency order, invoke the Developer agent with the task path. The Developer reads the task, referenced architecture doc, and project rules, then implements, runs green-bar, updates task status to `review`, and commits. Code is pushed to GitHub for user review.
 
-3. **Implement**: For each task in dependency order, invoke the Developer agent with the task path. The Developer reads the task, referenced architecture doc, and project rules, then implements, runs green-bar, updates task status to `review`, and commits.
+3. **Adversarial testing**: After each task implementation, invoke the Tester agent. The Tester actively tries to break the implementation: fuzzing inputs, testing concurrency, checking security, probing error paths. It writes edge case tests and produces a review report with ACCEPT/REJECT.
 
-4. **Validate**: After each task implementation, invoke the Tester agent with the task path. The Tester reads the spec's acceptance criteria and the implementation, writes additional tests if needed, runs the full suite, and produces a review report in `docs/plans/reviews/review-task-NNN.md`.
-
-5. **Accept or reject**: Read the tester's report. If ACCEPT, mark the task `done` — this unblocks dependent tasks. If REJECT, the Developer fixes the issues and re-submits.
+4. **Accept or reject**: Read the tester's report. If ACCEPT, mark the task `done` — this unblocks dependent tasks. If REJECT, the Developer fixes the issues and re-submits.
 
 6. **Repeat** steps 3-5 until all tasks for the spec are `done`.
 

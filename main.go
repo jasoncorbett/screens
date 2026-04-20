@@ -9,14 +9,15 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/jasoncorbett/screens/api"
 	"github.com/jasoncorbett/screens/internal/config"
+	"github.com/jasoncorbett/screens/internal/db"
 	"github.com/jasoncorbett/screens/internal/logging"
 	"github.com/jasoncorbett/screens/internal/version"
 
 	"github.com/jasoncorbett/screens/views"
-
 )
 
 func main() {
@@ -29,12 +30,37 @@ func main() {
 
 	slog.Info("starting screens", "version", version.Version)
 
+	sqlDB, err := db.Open(db.DBConfig{
+		Path:            cfg.DB.Path,
+		MaxOpenConns:    cfg.DB.MaxOpenConns,
+		MaxIdleConns:    cfg.DB.MaxIdleConns,
+		ConnMaxLifetime: cfg.DB.ConnMaxLifetime,
+	})
+	if err != nil {
+		log.Fatalf("database open: %v", err)
+	}
+
+	if err := db.Migrate(context.Background(), sqlDB); err != nil {
+		db.Close(sqlDB)
+		log.Fatalf("database migration: %v", err)
+	}
+
+	api.RegisterHealthCheck(func() api.HealthCheck {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		err := sqlDB.PingContext(ctx)
+		status := api.Status{Ok: true}
+		if err != nil {
+			status = api.Status{Ok: false, Message: "error: " + err.Error()}
+		}
+		return api.HealthCheck{Name: "database", Status: status}
+	})
+
 	mux := http.NewServeMux()
 	api.AddRoutes(mux)
 
 	views.AddRoutes(mux)
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler()))
-
 
 	srv := &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.HTTP.Host, cfg.HTTP.Port),
@@ -62,5 +88,10 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Fatalf("shutdown error: %v", err)
 	}
+
+	if err := db.Close(sqlDB); err != nil {
+		slog.Error("database close failed", "err", err)
+	}
+
 	slog.Info("shutdown complete")
 }

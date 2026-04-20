@@ -1,4 +1,3 @@
-
 package views
 
 import (
@@ -21,4 +20,3 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Format("15:04:05")
 	statusFragment(now).Render(r.Context(), w)
 }
-

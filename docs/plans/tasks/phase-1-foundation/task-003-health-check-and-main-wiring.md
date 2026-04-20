@@ -3,7 +3,7 @@ id: TASK-003
 title: "Health check integration and main.go wiring"
 spec: SPEC-001
 arch: ARCH-001
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-002]
 skills: [green-bar]

@@ -3,7 +3,7 @@ id: TASK-004
 title: "Test helper and sqlc configuration"
 spec: SPEC-001
 arch: ARCH-001
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-002]
 skills: [add-store, green-bar]

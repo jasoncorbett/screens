@@ -3,7 +3,7 @@ id: TASK-006
 title: "Auth service core (session management, user provisioning)"
 spec: SPEC-002
 arch: ARCH-002
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-005]
 skills: [green-bar]

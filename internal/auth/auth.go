@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jasoncorbett/screens/internal/db"
@@ -109,6 +110,12 @@ func (s *Service) ValidateSession(ctx context.Context, rawToken string) (*User, 
 		return nil, nil, fmt.Errorf("convert user: %w", err)
 	}
 
+	if !user.Active {
+		// Clean up the orphaned session for the inactive user.
+		_ = s.queries.DeleteSession(ctx, tokenHash)
+		return nil, nil, fmt.Errorf("account deactivated")
+	}
+
 	return &user, session, nil
 }
 
@@ -139,7 +146,7 @@ func (s *Service) ProvisionUser(ctx context.Context, email, displayName string) 
 	// No existing user -- check authorization.
 	var role Role
 
-	if email == s.config.AdminEmail {
+	if strings.EqualFold(email, s.config.AdminEmail) {
 		role = RoleAdmin
 	} else {
 		inv, invErr := s.queries.GetInvitationByEmail(ctx, email)
@@ -168,7 +175,7 @@ func (s *Service) ProvisionUser(ctx context.Context, email, displayName string) 
 	}
 
 	// Consume invitation if the user was invited.
-	if email != s.config.AdminEmail {
+	if !strings.EqualFold(email, s.config.AdminEmail) {
 		if delErr := s.queries.DeleteInvitationByEmail(ctx, email); delErr != nil {
 			return nil, fmt.Errorf("consume invitation: %w", delErr)
 		}

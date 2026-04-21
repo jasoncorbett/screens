@@ -2,7 +2,7 @@
 id: SPEC-001
 title: "Storage Engine"
 phase: 1
-status: ready
+status: accepted
 priority: p0
 created: 2026-04-18
 author: pm

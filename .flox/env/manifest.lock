@@ -7,6 +7,9 @@
         "pkg-path": "go",
         "version": "^1.26"
       },
+      "sqlc": {
+        "pkg-path": "sqlc"
+      },
       "templ": {
         "pkg-path": "templ"
       }
@@ -134,6 +137,126 @@
       ],
       "outputs": {
         "out": "/nix/store/ckcq2mj8zk0drhaaacy6mp9d924hnr4m-go-1.26.1"
+      },
+      "system": "x86_64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "sqlc",
+      "broken": false,
+      "derivation": "/nix/store/w3figca87vvy431ralb5f82cqm6mjsbx-sqlc-1.30.0.drv",
+      "description": "Generate type-safe code from SQL",
+      "install_id": "sqlc",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "name": "sqlc-1.30.0",
+      "pname": "sqlc",
+      "rev": "4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "rev_count": 980183,
+      "rev_date": "2026-04-14T12:31:25Z",
+      "scrape_date": "2026-04-16T06:07:07.837287Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.30.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/gsicjfav9f8w8vbm8gdim8s038356409-sqlc-1.30.0"
+      },
+      "system": "aarch64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "sqlc",
+      "broken": false,
+      "derivation": "/nix/store/vy4kkgcrvhh60k3ghgacz3v7q9rlm7rn-sqlc-1.30.0.drv",
+      "description": "Generate type-safe code from SQL",
+      "install_id": "sqlc",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "name": "sqlc-1.30.0",
+      "pname": "sqlc",
+      "rev": "4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "rev_count": 980183,
+      "rev_date": "2026-04-14T12:31:25Z",
+      "scrape_date": "2026-04-16T06:39:38.798983Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.30.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/cwg8flmr2ilg677s77i1krdg45mqlk33-sqlc-1.30.0"
+      },
+      "system": "aarch64-linux",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "sqlc",
+      "broken": false,
+      "derivation": "/nix/store/9xgcqqff5mhnjfmvravw75whfp8kqw89-sqlc-1.30.0.drv",
+      "description": "Generate type-safe code from SQL",
+      "install_id": "sqlc",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "name": "sqlc-1.30.0",
+      "pname": "sqlc",
+      "rev": "4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "rev_count": 980183,
+      "rev_date": "2026-04-14T12:31:25Z",
+      "scrape_date": "2026-04-16T07:09:50.053474Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.30.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/4hhzk8pc954bpcw37477mp76qglzajm7-sqlc-1.30.0"
+      },
+      "system": "x86_64-darwin",
+      "group": "toplevel",
+      "priority": 5
+    },
+    {
+      "attr_path": "sqlc",
+      "broken": false,
+      "derivation": "/nix/store/ns8glzajndqlgc7l31bbn39qipp5npw1-sqlc-1.30.0.drv",
+      "description": "Generate type-safe code from SQL",
+      "install_id": "sqlc",
+      "license": "MIT",
+      "locked_url": "https://github.com/flox/nixpkgs?rev=4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "name": "sqlc-1.30.0",
+      "pname": "sqlc",
+      "rev": "4bd9165a9165d7b5e33ae57f3eecbcb28fb231c9",
+      "rev_count": 980183,
+      "rev_date": "2026-04-14T12:31:25Z",
+      "scrape_date": "2026-04-16T07:45:13.377927Z",
+      "stabilities": [
+        "staging",
+        "unstable"
+      ],
+      "unfree": false,
+      "version": "1.30.0",
+      "outputs_to_install": [
+        "out"
+      ],
+      "outputs": {
+        "out": "/nix/store/93y7v0lmh7m59j19rxpp05x0qb6xmk8w-sqlc-1.30.0"
       },
       "system": "x86_64-linux",
       "group": "toplevel",

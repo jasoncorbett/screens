@@ -1,4 +1,3 @@
-
 package views
 
 import (
@@ -21,4 +20,3 @@ func AddRoutes(router *http.ServeMux) {
 		r(router)
 	}
 }
-

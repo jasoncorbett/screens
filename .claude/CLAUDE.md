@@ -51,6 +51,7 @@ When introducing a new cross-cutting convention, add it as `.claude/rules/<topic
 - Return errors; never panic in request paths. Accept `context.Context` as the first parameter on I/O or cancellable functions.
 - Never log secrets, auth headers, or PII. Never commit `.env` or credential files.
 - Standard library only — no third-party dependencies without explicit approval.
+- Approved exceptions: `modernc.org/sqlite` (pure-Go SQLite driver), `github.com/a-h/templ` (HTML templating), `sqlc` (SQL code generation build tool).
 
 ## Before committing
 
@@ -71,10 +72,9 @@ The project uses a structured agent-driven development process. See [docs/plans/
 
 Agent definitions live in `.claude/agents/`. Each agent has a specific role in the development loop:
 
-- [PM](agents/pm.md) — produces specs with acceptance criteria from feature requests
-- [Architect](agents/architect.md) — designs technical implementation, produces architecture docs and task breakdowns
+- [Architect](agents/architect.md) — writes specs, designs architecture, and creates task breakdowns (all in one pass)
 - [Developer](agents/developer.md) — implements tasks following project conventions and skills
-- [Tester](agents/tester.md) — validates implementations against acceptance criteria, produces review reports
+- [Tester](agents/tester.md) — adversarial code reviewer that tries to break implementations
 
 ### Skills
 
@@ -88,6 +88,7 @@ Reusable skill definitions live in `.claude/skills/`:
 - [add-widget](skills/add-widget/SKILL.md) — scaffold widget type implementations
 - [add-migration](skills/add-migration/SKILL.md) — add database schema migrations
 - [green-bar](skills/green-bar/SKILL.md) — pre-commit checks (gofmt, vet, build, test)
+- [build](skills/build/SKILL.md) — orchestrate the development loop (/build next, /build status, /build spec, etc.)
 
 ### Planning Documents
 

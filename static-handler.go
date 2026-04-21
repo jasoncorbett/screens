@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -58,4 +57,3 @@ func contentType(name string) string {
 	}
 	return "application/octet-stream"
 }
-

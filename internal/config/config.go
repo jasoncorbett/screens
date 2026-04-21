@@ -12,6 +12,14 @@ import (
 type Config struct {
 	HTTP HTTPConfig
 	Log  LogConfig
+	DB   DBConfig
+}
+
+type DBConfig struct {
+	Path            string
+	MaxOpenConns    int
+	MaxIdleConns    int
+	ConnMaxLifetime time.Duration
 }
 
 type HTTPConfig struct {
@@ -45,6 +53,12 @@ func Load() (Config, error) {
 			Level:   env("LOG_LEVEL", "info"),
 			DevMode: devMode,
 		},
+		DB: DBConfig{
+			Path:            env("DB_PATH", "screens.db"),
+			MaxOpenConns:    envInt("DB_MAX_OPEN_CONNS", 1),
+			MaxIdleConns:    envInt("DB_MAX_IDLE_CONNS", 1),
+			ConnMaxLifetime: envDuration("DB_CONN_MAX_LIFETIME", 0),
+		},
 	}
 
 	return cfg, cfg.Validate()
@@ -55,6 +69,10 @@ func (c Config) Validate() error {
 
 	if c.HTTP.Port < 1 || c.HTTP.Port > 65535 {
 		errs = append(errs, fmt.Sprintf("HTTP_PORT %d is out of range", c.HTTP.Port))
+	}
+
+	if c.DB.Path == "" {
+		errs = append(errs, "DB_PATH must not be empty")
 	}
 
 	if len(errs) > 0 {

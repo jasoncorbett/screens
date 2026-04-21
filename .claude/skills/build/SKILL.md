@@ -29,7 +29,7 @@ Each feature gets its own branch. The branch is created when design begins and u
 1. `/build design <name>` -- creates the branch `<name>` from main, switches to it
 2. `/build develop` -- commits on the same branch
 3. `/build test` -- commits on the same branch
-4. When all tasks are accepted, the branch is ready for merge/PR
+4. When all tasks are accepted, `/build accept` pushes the branch and opens a PR automatically
 
 **Before creating a branch**: Check if one already exists for this feature. If the user is already on a feature branch, use it.
 
@@ -185,11 +185,33 @@ Mark a task as done after the user approves.
 
 1. Locate the task file.
 2. Update the task frontmatter status from `review` to `done`.
-3. Commit the status change.
-4. Check if this unblocks any other tasks (tasks listing this one as a prerequisite).
-5. Report what was accepted and what's now unblocked.
-6. If all tasks for a spec are `done`, note the branch is ready for merge/PR.
-7. Suggest the next action: `/build next` or `/build status`.
+3. Update the spec frontmatter status to `accepted` if all its tasks are now `done`.
+4. Commit the status change.
+5. Check if this unblocks any other tasks (tasks listing this one as a prerequisite).
+6. Report what was accepted and what's now unblocked.
+7. If all tasks for a spec are `done`, **create a pull request**:
+   a. Push the branch: `git push -u origin <branch>`.
+   b. Read the spec to extract the title, problem statement, and acceptance criteria.
+   c. Collect the list of completed tasks (id + title) from the task files.
+   d. Create the PR using `gh pr create` with this format:
+      ```
+      gh pr create --title "<spec-title>" --body "$(cat <<'EOF'
+      ## Summary
+
+      <Problem statement from spec — first 2-3 sentences.>
+
+      ## Acceptance Criteria
+
+      <List of ACs from the spec, copied as-is.>
+
+      ## Tasks
+
+      <Bullet list: TASK-NNN: title (for each task belonging to this spec).>
+      EOF
+      )"
+      ```
+   e. Report the PR URL to the user.
+8. Suggest the next action: `/build next` or `/build status`.
 
 ## State Reading
 

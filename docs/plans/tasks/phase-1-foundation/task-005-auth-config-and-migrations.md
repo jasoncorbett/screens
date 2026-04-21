@@ -3,7 +3,7 @@ id: TASK-005
 title: "Auth configuration and database migrations"
 spec: SPEC-002
 arch: ARCH-002
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-config, add-migration, green-bar]

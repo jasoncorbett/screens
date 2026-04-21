@@ -13,6 +13,16 @@ type Config struct {
 	HTTP HTTPConfig
 	Log  LogConfig
 	DB   DBConfig
+	Auth AuthConfig
+}
+
+type AuthConfig struct {
+	AdminEmail         string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
+	SessionDuration    time.Duration
+	CookieName         string
 }
 
 type DBConfig struct {
@@ -59,6 +69,14 @@ func Load() (Config, error) {
 			MaxIdleConns:    envInt("DB_MAX_IDLE_CONNS", 1),
 			ConnMaxLifetime: envDuration("DB_CONN_MAX_LIFETIME", 0),
 		},
+		Auth: AuthConfig{
+			AdminEmail:         env("ADMIN_EMAIL", ""),
+			GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
+			GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", ""),
+			SessionDuration:    envDuration("SESSION_DURATION", 168*time.Hour),
+			CookieName:         env("SESSION_COOKIE_NAME", "screens_session"),
+		},
 	}
 
 	return cfg, cfg.Validate()
@@ -75,10 +93,41 @@ func (c Config) Validate() error {
 		errs = append(errs, "DB_PATH must not be empty")
 	}
 
+	if c.Auth.AdminEmail == "" {
+		errs = append(errs, "ADMIN_EMAIL must not be empty")
+	}
+	if c.Auth.GoogleClientID == "" {
+		errs = append(errs, "GOOGLE_CLIENT_ID must not be empty")
+	}
+	if c.Auth.GoogleClientSecret == "" {
+		errs = append(errs, "GOOGLE_CLIENT_SECRET must not be empty")
+	}
+	if c.Auth.GoogleRedirectURL == "" {
+		errs = append(errs, "GOOGLE_REDIRECT_URL must not be empty")
+	}
+	if c.Auth.SessionDuration < time.Minute {
+		errs = append(errs, "SESSION_DURATION must be at least 1 minute")
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration errors:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
+}
+
+func (c Config) String() string {
+	secret := "REDACTED"
+	if c.Auth.GoogleClientSecret == "" {
+		secret = ""
+	}
+	return fmt.Sprintf(
+		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s}",
+		c.HTTP.Host, c.HTTP.Port,
+		c.Log.Level, c.Log.DevMode,
+		c.DB.Path,
+		c.Auth.AdminEmail, c.Auth.GoogleClientID, secret, c.Auth.GoogleRedirectURL,
+		c.Auth.SessionDuration, c.Auth.CookieName,
+	)
 }
 
 func env(key, fallback string) string {

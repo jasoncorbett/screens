@@ -166,12 +166,12 @@ Admin auth is the security boundary that every subsequent feature depends on. Wi
 ## Dependencies
 
 - Depends on: SPEC-001 (Storage Engine) -- the database, migration system, and test helper must be in place.
-- External dependency: Google OAuth 2.0 APIs (authorization endpoint, token endpoint, JWKS/tokeninfo endpoint).
-- No new Go module dependencies required beyond stdlib -- `net/http` for OAuth HTTP calls, `crypto/sha256` for hashing, `encoding/json` for token parsing, `crypto/rsa` + `encoding/base64` for JWT validation.
+- External dependency: Google OAuth 2.0 APIs (authorization endpoint, token endpoint, JWKS endpoint).
+- New approved Go module dependency: `golang.org/x/oauth2` -- the Go team's official OAuth 2.0 library. See ADR-002.
 
 ## Open Questions
 
 All resolved.
 
-- Q1: **Resolved** -- No new Go module dependencies are needed. Google OAuth can be implemented with `net/http` (HTTP client), `encoding/json` (parsing responses), `crypto/sha256` (token hashing), and `crypto/rsa` + `math/big` (JWT signature validation). The stdlib is sufficient.
-- Q2: **Resolved** -- ID token validation will use Google's JWKS endpoint to fetch public keys and verify the RS256 signature locally. This avoids a network round-trip on every validation and is more robust than the tokeninfo endpoint.
+- Q1: **Resolved** -- `golang.org/x/oauth2` is approved as a dependency. It is maintained by the Go team as part of the official extended standard library and provides a correct, battle-tested OAuth 2.0 implementation.
+- Q2: **Resolved** -- ID token validation will use Google's JWKS endpoint to fetch public keys and verify the RS256 signature locally. This avoids a network round-trip on every session validation and is more robust than the tokeninfo endpoint.

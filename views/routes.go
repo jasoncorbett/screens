@@ -51,8 +51,8 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 	adminMux.HandleFunc("GET /admin/{$}", handleAdmin)
 	adminMux.HandleFunc("POST /admin/logout", handleLogout(deps.Auth, deps.CookieName))
 
-	protected := middleware.RequireCSRF()(
-		middleware.RequireAuth(deps.Auth, deps.CookieName, "/admin/login")(adminMux),
+	protected := middleware.RequireAuth(deps.Auth, deps.CookieName, "/admin/login")(
+		middleware.RequireCSRF()(adminMux),
 	)
 	mux.Handle("/admin/", protected)
 }

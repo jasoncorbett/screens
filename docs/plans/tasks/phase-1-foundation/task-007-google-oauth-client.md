@@ -3,7 +3,7 @@ id: TASK-007
 title: "Google OAuth client (golang.org/x/oauth2, ID token validation)"
 spec: SPEC-002
 arch: ARCH-002
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-005]
 skills: [green-bar]

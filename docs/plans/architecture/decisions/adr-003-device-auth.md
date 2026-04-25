@@ -36,6 +36,25 @@ The threat model is a household: trusted local network most of the time, but the
 - The device sends the token on every request as `Authorization: Bearer <token>`. For browser page loads where attaching a header is awkward, the same token is also accepted in a cookie (`screens_device`).
 - Revocation is a single column update (`revoked_at = now`) that takes effect on the next request. No revocation list, no deny cache, no key rotation.
 
+### Browser enrollment: admin-bootstrap, not QR/PIN
+
+The dominant deployment target is a wall-mounted browser kiosk. A kiosk has no keyboard for an admin to paste a 64-character token into a config file, and the cookie cannot be set out-of-band. We therefore add an in-person enrollment flow:
+
+1. Admin walks up to the kiosk and opens the admin URL in the kiosk's browser.
+2. Browser bounces through `/admin/login` -> Google OAuth -> back. Admin is now signed into the admin UI **on the kiosk's browser**.
+3. Admin opens `/admin/devices` and clicks one of two buttons: "enroll this browser as <existing device name>" or "create new device named <X> and enroll this browser".
+4. Server-side, the handler calls `RotateDeviceToken` (issuing a fresh token for the target device, replacing any prior token), calls `auth.Service.Logout` with the admin cookie value to delete that single session row from the database, clears the admin session cookie on the response, sets the device cookie with the new raw token, and 302-redirects to a configured device landing URL (default `/device/`).
+
+We considered QR-code pairing and PIN pairing and rejected both: they ship a new unauthenticated claim endpoint, a poll endpoint on the device side, a TTL on pairing tokens, and rate-limiting. Five new attack-surface knobs to replace a flow that the admin can do by walking up to the screen they are configuring. The household model means an admin physically reaching the kiosk is realistic; this is a household dashboard, not a fleet of remote signage.
+
+Critical properties of the chosen flow:
+
+- **POST-only, CSRF-protected.** A GET-triggered enrollment would be a single-click downgrade attack against an admin's main browser. The admin clicks a malicious link, their session cookie is sent, the server swaps cookies, the admin is locked out of `/admin/`. POST + CSRF closes that hole using the same defence we already use for every other state-changing admin endpoint.
+- **Surgical session deletion.** `Logout(rawToken)` deletes exactly one row -- the row keyed by the `token_hash` of the cookie this request sent. Other admin sessions for the same user (laptop, phone) are untouched because they have different token values. The admin does not get punted out of every browser they own.
+- **Atomic from the user's perspective.** `RotateDeviceToken` runs first; if the device is missing or revoked, the handler 302s with a flash error BEFORE clearing any cookies or deleting any session row. A failed enrollment leaves the admin still signed in.
+- **Token rotation, not reuse.** Even when enrolling against an existing un-revoked device, we issue a NEW token and overwrite the row's `token_hash`. Any previously distributed copy of the token becomes invalid. This is the property that makes "re-enrolling a kiosk after taking it down" safe: the old token cannot also be used.
+- **Landing URL is device-friendly.** Post-enrollment the browser arrives at `/device/` (configurable). The route is registered under `RequireAuth` only -- no `RequireRole` -- so the device identity is sufficient. Phase 1 ships a placeholder template; Phase 2 Screen Display replaces the body with the real screen content. The URL itself is stable across phases.
+
 ### Reuse, don't reinvent
 
 - The token primitive is `auth.GenerateToken` and `auth.HashToken`, the same functions that power admin session tokens. Same entropy, same hashing, same encoding. One surface to audit, one set of tests for token-generation correctness.
@@ -61,9 +80,11 @@ The threat model is a household: trusted local network most of the time, but the
 **Accepted trade-offs:**
 
 - The `RequireAuth` signature changes: it now takes both the session cookie name and the device cookie name. All existing call sites in `views/routes.go` and `main.go` are updated -- this is a one-time cost.
-- Devices share the same `auth.Service` as admins. The service grows new methods (`CreateDevice`, `ValidateDeviceToken`, `RevokeDevice`, `ListDevices`, `MarkDeviceSeen`) and the type starts to do "more than session management". We accept this; an `internal/auth` package is the right home for both admin and device identity. Splitting devices into a sibling package would just create circular import temptations later.
+- Devices share the same `auth.Service` as admins. The service grows new methods (`CreateDevice`, `ValidateDeviceToken`, `RevokeDevice`, `ListDevices`, `MarkDeviceSeen`, `RotateDeviceToken`) and the type starts to do "more than session management". We accept this; an `internal/auth` package is the right home for both admin and device identity. Splitting devices into a sibling package would just create circular import temptations later.
 - `last_seen_at` adds write traffic on every successful device auth. We mitigate with a server-configurable throttle (`DEVICE_LAST_SEEN_INTERVAL`, default 1 minute) implemented as a single SQL `UPDATE ... WHERE last_seen_at < datetime('now', '-1 minutes')`.
 - Tokens are NOT recoverable after creation. If an admin forgets to copy the token, they have to revoke and recreate. We accept this in exchange for the security guarantee that a database snapshot does not leak any usable credentials.
+- The `/device/` landing URL is reserved by Phase 1 (placeholder content) and replaced by Phase 2 (Screen Display). Reserving the URL early means the enrollment flow does not have to change shape when Phase 2 ships -- the cookie swap and redirect target are stable.
+- Browser enrollment works against a single browser at a time. Enrolling twenty kiosks means walking to twenty kiosks. We accept this; the alternative is a bulk-enroll flow which requires PIN/QR machinery we have explicitly rejected. A future spec could add bulk enrollment if the household ever reaches a scale where one-by-one is painful.
 
 **Benefits:**
 
@@ -78,3 +99,5 @@ The threat model is a household: trusted local network most of the time, but the
 
 - A token in `Authorization` is observable to any reverse proxy that sits in front of the service. We assume the operator deploys behind TLS and trusts their own proxy. This is the same assumption admin sessions make.
 - A device token is bearer-style and confers full device privileges. There is no per-route fine-grained capability scheme. For a household dashboard this is appropriate; if richer scoping is ever needed, a future ADR can revisit.
+- An admin who enrolls a kiosk and then forgets which kiosk maps to which device will have to look at the device-management page (which shows last-seen timestamps) or revoke and re-enroll. We do not show the device cookie value back to the admin after enrollment -- the same "shown exactly once" rule applies to the rotated token as to the create-time token. This is acceptable: the admin does not need the raw token; the kiosk's browser holds it.
+- If a kiosk is stolen with a valid device cookie still in its browser storage, an attacker can authenticate as the device until the admin revokes it. This is the same risk profile as a stolen laptop with a valid admin session cookie. The mitigation is the existing one-click revoke on `/admin/devices`.

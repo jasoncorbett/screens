@@ -68,11 +68,11 @@ Add device-domain code to `internal/auth`: a `Device` type, an `Identity` type t
    - Do not change the existing `userKey`, `sessionKey`, or their accessors.
 
 4. Extend `internal/auth/auth.go` (`Config` struct + `Service` methods):
-   - Add `DeviceCookieName string` and `DeviceLastSeenInterval time.Duration` fields to `Config`.
+   - Add `DeviceCookieName string`, `DeviceLastSeenInterval time.Duration`, and `DeviceLandingURL string` fields to `Config`.
    - Add two sentinel errors at package level:
      - `var ErrDeviceNotFound = errors.New("device not found")`
      - `var ErrDeviceRevoked = errors.New("device revoked")`
-   - Add five new methods on `*Service`:
+   - Add six new methods on `*Service`:
      - `func (s *Service) CreateDevice(ctx context.Context, name, createdBy string) (Device, string, error)`
        - Trim whitespace from name; reject empty with `fmt.Errorf("device name required")`.
        - Generate raw token via `GenerateToken()`.
@@ -97,6 +97,12 @@ Add device-domain code to `internal/auth`: a `Device` type, an `Identity` type t
        - Wrap errors with `fmt.Errorf("revoke device: %w", err)`.
      - `func (s *Service) ListDevices(ctx context.Context) ([]Device, error)`
        - Call `queries.ListDevices(ctx)`, map each row through `deviceFromRow`, return the slice.
+     - `func (s *Service) RotateDeviceToken(ctx context.Context, deviceID string) (string, error)`
+       - Generate a new raw token via `GenerateToken()`.
+       - Call `queries.RotateDeviceToken(ctx, db.RotateDeviceTokenParams{TokenHash: HashToken(rawToken), ID: deviceID})`.
+       - On error, wrap with `fmt.Errorf("rotate device token: %w", err)`.
+       - Inspect `result.RowsAffected()`. If 0, return `("", ErrDeviceNotFound)` -- the device id is unknown OR has been revoked. Both cases are equivalent for the caller (refuse the operation).
+       - Otherwise return `(rawToken, nil)`. The caller is expected to immediately put the raw token in a cookie and never persist it.
 
 5. Update `auth.NewService` so the `Config` struct fields you added in step 4 are stored. (No code change needed if you simply added them to the struct -- the existing `NewService` already copies the whole `Config`.)
 
@@ -111,6 +117,7 @@ From SPEC-003 (filtered to what this task verifies via direct service-level test
 - [ ] AC-13: `RevokeDevice(idA)` does not affect `ValidateDeviceToken` for device B.
 - [ ] AC-15: `MarkDeviceSeen` updates `last_seen_at` when the previous value is NULL or older than the throttle interval.
 - [ ] AC-16: Calling `MarkDeviceSeen` twice within the throttle window leaves `last_seen_at` unchanged on the second call.
+- Service-level prerequisite for AC-27/AC-31/AC-37 (the enrollment flow ACs in the spec): `RotateDeviceToken` returns a fresh raw token whose hash matches the new `token_hash`, the previous token no longer validates, and a revoked device's id returns `ErrDeviceNotFound`.
 
 ## Skills to Use
 
@@ -135,6 +142,10 @@ Use `db.OpenTestDB(t)` for a real in-memory database (the schema is the actual m
    - `MarkDeviceSeen` with throttle = 0 updates the timestamp on every call.
    - `MarkDeviceSeen` with a large throttle (e.g. `1h`) updates once and leaves the timestamp unchanged on the immediate second call. To verify: read `LastSeenAt` from a `GetDeviceByID` lookup before and after the second call; assert equality.
    - `ListDevices` returns devices in `created_at` order including revoked ones.
+   - `RotateDeviceToken` returns a non-empty raw token and updates the row so that `ValidateDeviceToken(newToken)` succeeds AND `ValidateDeviceToken(oldToken)` returns `ErrDeviceNotFound`.
+   - Two consecutive `RotateDeviceToken` calls return distinct raw tokens.
+   - `RotateDeviceToken("non-existent-id")` returns `ErrDeviceNotFound`.
+   - After `RevokeDevice(id)`, `RotateDeviceToken(id)` returns `ErrDeviceNotFound` (the `WHERE revoked_at IS NULL` clause makes a revoked device behave like a missing one for rotation purposes).
 4. Write tests as a single table where it reads naturally; otherwise individual functions.
 5. Use `t.Helper()` in any test helper that builds a service.
 6. Follow `.claude/rules/testing.md`. Do not write tests that simply assert a method exists or returns non-nil.
@@ -144,9 +155,9 @@ Use `db.OpenTestDB(t)` for a real in-memory database (the schema is the actual m
 - [ ] `internal/auth/device.go` created with `Device`, `IsRevoked`, `deviceFromRow`.
 - [ ] `internal/auth/identity.go` created with `IdentityKind` constants, `Identity`, helpers.
 - [ ] `internal/auth/context.go` extended with `Identity` and `Device` keys + helpers; existing helpers untouched.
-- [ ] `auth.Config` extended with `DeviceCookieName` and `DeviceLastSeenInterval`.
+- [ ] `auth.Config` extended with `DeviceCookieName`, `DeviceLastSeenInterval`, and `DeviceLandingURL`.
 - [ ] `ErrDeviceNotFound` and `ErrDeviceRevoked` added.
-- [ ] Five new `*Service` methods implemented.
-- [ ] All listed tests pass.
+- [ ] Six new `*Service` methods implemented (CreateDevice, ValidateDeviceToken, MarkDeviceSeen, RevokeDevice, ListDevices, RotateDeviceToken).
+- [ ] All listed tests pass, including the four `RotateDeviceToken` cases.
 - [ ] green-bar passes.
 - [ ] No new third-party dependencies.

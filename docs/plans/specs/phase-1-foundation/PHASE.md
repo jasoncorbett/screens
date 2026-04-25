@@ -31,5 +31,6 @@ None -- this is the first phase.
 2. Admin can register (initial setup), log in, and log out
 3. Admin can create and revoke device tokens
 4. Device can authenticate with a token
-5. Protected endpoints reject unauthenticated requests
-6. All green-bar checks pass
+5. Admin can convert a browser into a device by clicking a single button on `/admin/devices` (the "browser enrollment" flow, designed for in-person setup of wall-mounted kiosks)
+6. Protected endpoints reject unauthenticated requests
+7. All green-bar checks pass

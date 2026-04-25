@@ -22,6 +22,8 @@ Read `.claude/CLAUDE.md` and relevant `.claude/rules/` files before starting.
 
 Build the admin-facing device management page. Admins log into `/admin/devices`, see existing devices with last-seen timestamps, create new devices (the freshly created token is shown exactly once), and revoke devices in a single click. Wires the routes through the existing `RequireRole(RoleAdmin)` chain so non-admins are rejected.
 
+This task delivers the "traditional" copy-the-token UI for programmatic clients. The browser-enrollment flow (cookie swap, device landing page, etc.) is the SEPARATE TASK-015 that builds on top of this one. Keep this task focused on list / create / revoke.
+
 ## Context
 
 - The view-handler pattern is established in `views/users.go` and `views/users.templ` -- copy that pattern. Each handler reads the user / session from context, calls the corresponding `auth.Service` method, and renders a templ component or 302-redirects with a flash query param.
@@ -69,6 +71,7 @@ Build the admin-facing device management page. Admins log into `/admin/devices`,
    - Renders a table of NON-revoked devices with columns: Name, ID, Created, Last Seen, Actions. The Actions column has a POST form to `/admin/devices/{id}/revoke` with the `_csrf` token.
    - Optionally, renders a separate table of revoked devices below (Name, ID, Created, Revoked At, no Actions). Empty section may be hidden when there are no revoked devices.
    - Format timestamps with `Format("2006-01-02 15:04 MST")` for created/revoked, and either the same format or `"never"` for `LastSeenAt` when nil.
+   - Leave room for TASK-015 to add an "Enroll this browser as ..." section on the same page. A simple way to make this easy: structure the templ as `<section>` blocks so a future patch only adds a new section, not a rewrite. Do NOT pre-emptively add the enrollment forms in this task.
 
 2. Run `templ generate` to compile the template.
 

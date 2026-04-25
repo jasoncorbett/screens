@@ -76,12 +76,12 @@ Make protected endpoints accept either an admin session OR a device bearer token
 
 5. Update `views/routes.go`:
    - The call to `middleware.RequireAuth(deps.Auth, deps.CookieName, "/admin/login")` becomes `middleware.RequireAuth(deps.Auth, deps.CookieName, deps.DeviceCookieName, "/admin/login")`.
-   - Add `DeviceCookieName string` to the `Deps` struct.
+   - Add `DeviceCookieName string` and `DeviceLandingURL string` fields to the `Deps` struct. (`DeviceLandingURL` is consumed by TASK-015's enrollment handlers; declaring it here keeps the `Deps` struct stable across both tasks.)
    - Do NOT change the order of the wrapping for the admin sub-mux (RequireAuth -> RequireCSRF -> sub-mux); only the cookie-name argument changes.
 
 6. Update `main.go`:
-   - When constructing `&views.Deps{...}`, set `DeviceCookieName: cfg.Auth.DeviceCookieName`.
-   - When constructing `auth.Config{...}` for `auth.NewService`, set `DeviceCookieName: cfg.Auth.DeviceCookieName` and `DeviceLastSeenInterval: cfg.Auth.DeviceLastSeenInterval`.
+   - When constructing `&views.Deps{...}`, set `DeviceCookieName: cfg.Auth.DeviceCookieName` and `DeviceLandingURL: cfg.Auth.DeviceLandingURL`.
+   - When constructing `auth.Config{...}` for `auth.NewService`, set `DeviceCookieName: cfg.Auth.DeviceCookieName`, `DeviceLastSeenInterval: cfg.Auth.DeviceLastSeenInterval`, and `DeviceLandingURL: cfg.Auth.DeviceLandingURL`.
 
 ## Acceptance Criteria
 
@@ -134,8 +134,8 @@ Use `httptest.NewRecorder` plus the real `auth.Service` backed by `db.OpenTestDB
 - [ ] `RequireCSRF` exempts device identities.
 - [ ] `RequireDevice` added in its own file.
 - [ ] `RequireRole` carries the new clarifying comment but no behaviour change.
-- [ ] `views/routes.go` and `main.go` updated to pass `DeviceCookieName`.
-- [ ] `views.Deps` gains the `DeviceCookieName` field.
+- [ ] `views/routes.go` and `main.go` updated to pass `DeviceCookieName` and `DeviceLandingURL`.
+- [ ] `views.Deps` gains the `DeviceCookieName` and `DeviceLandingURL` fields.
 - [ ] All listed middleware tests pass; existing admin-session middleware tests still pass.
 - [ ] green-bar passes.
 - [ ] No new third-party dependencies.

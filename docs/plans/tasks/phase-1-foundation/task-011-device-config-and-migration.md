@@ -44,21 +44,24 @@ Lay the data-layer foundation for device authentication: add the two new config 
 
 ## Requirements
 
-1. Add two fields to `AuthConfig` in `internal/config/config.go`:
+1. Add three fields to `AuthConfig` in `internal/config/config.go`:
    - `DeviceCookieName string`
    - `DeviceLastSeenInterval time.Duration`
+   - `DeviceLandingURL string`
 
 2. Parse them in `Load()`:
    - `DEVICE_COOKIE_NAME` -- string, default `screens_device`.
    - `DEVICE_LAST_SEEN_INTERVAL` -- duration, default `1m`.
+   - `DEVICE_LANDING_URL` -- string, default `/device/`.
 
 3. Add validation in `Config.Validate()`:
    - `DeviceCookieName` MUST NOT be empty.
    - `DeviceLastSeenInterval` MUST be `>= 0` (zero means "every auth"; negative is meaningless).
+   - `DeviceLandingURL` MUST NOT be empty AND MUST start with `/` (e.g., `/device/`). Reject anything that does not begin with `/` because the value is used both as a route registration prefix and as a redirect target.
 
-4. Update the `Config.String()` method to include the two new fields. They are not secrets, so they print as-is. Keep the existing redaction of `GoogleClientSecret`.
+4. Update the `Config.String()` method to include the three new fields. They are not secrets, so they print as-is. Keep the existing redaction of `GoogleClientSecret`.
 
-5. Update `README.md` configuration table with the two new env vars. Order them adjacent to the other `SESSION_*` rows for discoverability.
+5. Update `README.md` configuration table with the three new env vars. Order them adjacent to the other `SESSION_*` rows for discoverability.
 
 6. Create `internal/db/migrations/005_create-devices.sql` with the schema in the architecture doc:
    - `devices` table with columns: `id TEXT PRIMARY KEY`, `name TEXT NOT NULL`, `token_hash TEXT NOT NULL UNIQUE`, `created_by TEXT NOT NULL REFERENCES users(id) ON DELETE RESTRICT`, `created_at TEXT NOT NULL DEFAULT (datetime('now'))`, `last_seen_at TEXT`, `revoked_at TEXT`.
@@ -73,15 +76,17 @@ Lay the data-layer foundation for device authentication: add the two new config 
    - `ListDevices :many` -- SELECT all columns ORDER BY created_at.
    - `RevokeDevice :exec` -- UPDATE devices SET revoked_at = datetime('now') WHERE id = ? AND revoked_at IS NULL.
    - `TouchDeviceSeen :execresult` -- UPDATE devices SET last_seen_at = datetime('now') WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < datetime('now', ?)). The second `?` is the interval expression like `'-60 seconds'`.
+   - `RotateDeviceToken :execresult` -- UPDATE devices SET token_hash = ? WHERE id = ? AND revoked_at IS NULL. Returning the result lets the service distinguish "row updated" from "no such device or already revoked" via `RowsAffected`.
 
 8. Run `sqlc generate` to produce `internal/db/devices.sql.go` and a new `Device` struct entry in `internal/db/models.go`. Verify the generated code compiles.
 
 ## Acceptance Criteria
 
-From SPEC-003:
+From SPEC-003 (renumbered after the enrollment additions):
 
-- [ ] AC-27: When `DEVICE_COOKIE_NAME` is not set, then the cookie name defaults to `screens_device`.
-- [ ] AC-28: When `DEVICE_LAST_SEEN_INTERVAL` is set to `5m`, then the parsed config field equals `5 * time.Minute`. (Throttling behaviour itself is verified in TASK-012.)
+- [ ] AC-39: When `DEVICE_COOKIE_NAME` is not set, then the cookie name defaults to `screens_device`.
+- [ ] AC-40 (config half): When `DEVICE_LAST_SEEN_INTERVAL` is set to `5m`, then the parsed config field equals `5 * time.Minute`. (Throttling behaviour itself is verified in TASK-012.)
+- [ ] AC-41: When `DEVICE_LANDING_URL` is not set, then the default landing URL is `/device/`. When set to a non-`/`-prefixed value (e.g., `device`), validation fails with a non-nil error mentioning `DEVICE_LANDING_URL`.
 - Schema-level prerequisites for AC-1 through AC-5 (devices table exists, token_hash UNIQUE constraint, etc.) verified by migration tests.
 
 ## Skills to Use
@@ -99,16 +104,20 @@ From SPEC-003:
    - `DEVICE_LAST_SEEN_INTERVAL=5m` produces `DeviceLastSeenInterval == 5*time.Minute`.
    - `DeviceCookieName == ""` causes `Validate()` to return a non-nil error mentioning `DEVICE_COOKIE_NAME`.
    - Negative `DeviceLastSeenInterval` (use `t.Setenv` with `-1s`) causes `Validate()` to fail.
+   - Default `DeviceLandingURL == "/device/"` when env unset.
+   - `DEVICE_LANDING_URL=/foo/` produces `DeviceLandingURL == "/foo/"`.
+   - `DEVICE_LANDING_URL=foo` (no leading slash) causes `Validate()` to fail with an error mentioning `DEVICE_LANDING_URL`.
+   - Empty `DEVICE_LANDING_URL` causes `Validate()` to fail.
 2. A migration test (in `internal/db/`) that calls `db.OpenTestDB(t)` and asserts the `devices` table exists by querying `sqlite_master`. Also asserts the unique index on `token_hash` exists.
 3. Use `t.Setenv` for env-var driven tests; do NOT mutate the process environment without cleanup.
 4. Follow `.claude/rules/testing.md` -- tests must earn their existence. Do not assert sqlc-generated method signatures; the compiler does that for free.
 
 ## Definition of Done
 
-- [ ] Two new `AuthConfig` fields added, parsed, validated, included in `String()`.
-- [ ] README configuration table updated.
+- [ ] Three new `AuthConfig` fields (`DeviceCookieName`, `DeviceLastSeenInterval`, `DeviceLandingURL`) added, parsed, validated, included in `String()`.
+- [ ] README configuration table updated with all three new env vars.
 - [ ] Migration `005_create-devices.sql` created with `+up` and `+down` sections.
-- [ ] `internal/db/queries/devices.sql` created with all six queries.
+- [ ] `internal/db/queries/devices.sql` created with all seven queries (CreateDevice, GetDeviceByTokenHash, GetDeviceByID, ListDevices, RevokeDevice, TouchDeviceSeen, RotateDeviceToken).
 - [ ] `sqlc generate` produced `internal/db/devices.sql.go` and updated `internal/db/models.go` with a `Device` struct.
 - [ ] Tests for config + migration pass.
 - [ ] green-bar passes (`gofmt -l .` empty, `go vet ./...`, `go build ./...`, `go test ./...`).

@@ -26,8 +26,11 @@ Without this spec, no device-facing feature in Phase 2 (Screen Display, page rot
 - As an **admin**, I want the device's authentication token to be displayed exactly once at provisioning time so that I can copy it into the device's configuration without it being recoverable later from the database.
 - As an **admin**, I want to revoke a device's token immediately so that a stolen or repurposed tablet can no longer reach the service.
 - As an **admin**, I want to see when each device last contacted the service so that I can identify dead or unplugged screens at a glance.
+- As an **admin standing in front of a wall display**, I want to enroll the browser running on that screen as a device in a single click so that I do not have to manually copy a 64-character token onto a kiosk that has no keyboard.
+- As an **admin**, I want enrolling a browser as a device to immediately log my admin session out **of that browser** (and only that browser) so that the wall display cannot accidentally be used as an admin terminal and so my admin session on my laptop is not affected.
 - As a **device**, I want to authenticate with a single long-lived bearer token in the `Authorization` header so that I can silently reconnect after every reboot without user input.
 - As a **device**, I want my token to also be accepted via a cookie when I am loading a full HTML page so that the browser running on the wall display can render screen content directly without needing JavaScript to attach a header.
+- As a **device kiosk browser**, I want a stable URL to land on after enrollment that does not require admin auth so that a refresh of the page does not bounce me back into a login flow.
 - As a **handler author**, I want one `RequireAuth` middleware that accepts either an admin session or a device token so that I do not have to write two protection paths for every endpoint.
 - As a **handler author**, I want to read a typed `Identity` value from the request context (admin user, device, or none) so that I can branch on caller type without re-parsing cookies or headers.
 
@@ -43,7 +46,7 @@ Without this spec, no device-facing feature in Phase 2 (Screen Display, page rot
 6. The system MUST set `revoked_at` to the current time when an admin revokes a device, rather than deleting the row, so that audit information is preserved.
 7. The system MUST treat any device whose `revoked_at` is non-NULL as authentication-failed.
 8. The system SHOULD update `last_seen_at` on every successful device-token authentication. The update MAY be coalesced (e.g., at most once per minute per device) to avoid write amplification.
-9. The system MAY allow an admin to "rotate" a device by issuing a new token and invalidating the old one in a single step. This is OPTIONAL for v1; the equivalent (revoke + create) is acceptable.
+9. The system MUST allow an admin to "rotate" a device's token (issue a new token and invalidate the old one in a single step) without revoking and recreating the device. This is required by the browser-enrollment flow (requirement 31): enrolling a browser as an existing device replaces the device's token in place, so any previously issued token for that device becomes invalid. The rotated token MUST be returned to the immediate caller exactly once (used to set the device cookie) and never persisted in plaintext.
 
 ### Token Presentation
 
@@ -77,15 +80,39 @@ Without this spec, no device-facing feature in Phase 2 (Screen Display, page rot
 ### Admin UI
 
 27. The system MUST provide a `/admin/devices` page accessible only to admin users that lists all non-revoked devices with: name, ID, created date, last-seen date.
-28. The page MUST allow an admin to create a new device by submitting a form with a name. On successful creation, the page MUST display the raw token to the admin once, with a clear instruction that it cannot be recovered later.
+28. The page MUST allow an admin to create a new device by submitting a form with a name. On successful creation, the page MUST display the raw token to the admin once, with a clear instruction that it cannot be recovered later. (This "copy the token" flow is retained for programmatic clients and for cases where the admin wants the token without converting their current browser into a device.)
 29. The page MUST allow an admin to revoke a device with a single POST (CSRF-protected). After revocation the device MUST appear in a separate "Revoked" section (or be hidden, at the implementation's discretion).
 30. The page MUST display the list of revoked devices at least optionally so the admin can still see recent revocations.
 
+### Browser Enrollment
+
+The dominant deployment target is a wall-mounted kiosk browser. Cookies cannot be set on that browser out of band, so the system MUST provide a flow whereby an admin standing in front of the kiosk converts the kiosk's currently-authenticated admin browser session into a device session in a single click.
+
+31. The system MUST provide a POST endpoint (e.g. `POST /admin/devices/{id}/enroll-browser`) that, given a current admin caller, performs the following actions atomically from the caller's perspective:
+    - Generate a fresh device token for the target device (replacing any prior token for that device).
+    - Delete the admin session backing the caller's current request from the database (call the existing `auth.Service.Logout` so the row is gone, not orphaned).
+    - Clear the admin session cookie on the response (MaxAge -1, same attributes as logout).
+    - Set the device cookie on the response with the freshly generated raw token.
+    - Redirect (302) the caller to the configured device landing URL (see requirement 38).
+32. The endpoint MUST require an admin caller. The middleware chain MUST be `RequireAuth` then `RequireRole(RoleAdmin)` then `RequireCSRF` then this handler. A non-admin (member) caller MUST receive 403; an unauthenticated caller MUST receive the standard `RequireAuth` failure (302 to login for HTML, 401 otherwise).
+33. The endpoint MUST be POST only. A GET MUST NOT trigger enrollment, because a GET-triggered enrollment would let an attacker convert an admin's browser into a device by getting the admin to click a link.
+34. The endpoint MUST consume a valid CSRF token from the form (existing CSRF middleware behaviour). Without this, an attacker who tricks an admin into submitting a cross-site form could downgrade the admin's browser to a device.
+35. The system MUST also provide an admin UI affordance that creates a new device and enrolls the current browser as that device in a single user action (one POST, two server-side operations: create then enroll). This combined flow MAY be implemented as a separate endpoint (e.g. `POST /admin/devices/enroll-new-browser` with a `name` form field) or as the create-then-redirect chain implemented client-side; either is acceptable as long as the admin only has to fill in one form on the kiosk.
+36. The system MUST reject `enroll-browser` for a target device whose `revoked_at` is non-NULL with a flash error (302 back to `/admin/devices?error=...`). The admin's session MUST NOT be terminated in this rejection case -- the swap only happens if the target device is valid.
+37. The system MUST tolerate enrollment when the caller's browser already has a device cookie set: the new device cookie REPLACES the old one (same cookie name, new value), and any old admin session cookie is cleared. The browser ends up with exactly one auth cookie -- the freshly issued device cookie.
+38. The system MUST add a `DEVICE_LANDING_URL` config setting (default `/device/`) controlling where the browser is redirected after enrollment. The endpoint at this URL MUST NOT require admin auth (the admin session is gone by the time the browser arrives).
+39. The system MUST register a placeholder handler at the device landing URL (default `/device/`) that:
+    - Is gated by `RequireAuth` only (NOT `RequireRole(RoleAdmin)`), so a device identity is sufficient.
+    - Renders a minimal HTML page identifying the browser as the named device (e.g., `"This browser is enrolled as <device-name>. The screen display will appear here once the screen feature ships."`).
+    - This handler is a placeholder; Phase 2 (Screen Display) will replace its body with the actual screen content. Its existence in Phase 1 is required so that enrollment has somewhere to land.
+40. The system MUST log one `slog.Info` line per successful enrollment with attributes `device_id`, `device_name`, and `enrolled_by` (admin email). It MUST NOT log the raw token.
+
 ### Configuration
 
-31. The system MUST add a `DEVICE_COOKIE_NAME` config setting with default `screens_device`.
-32. The system MUST add a `DEVICE_LAST_SEEN_INTERVAL` config setting (duration, default `1m`) controlling how often `last_seen_at` is allowed to be re-written for the same device.
-33. No new secret-bearing config is required (device tokens live in the database).
+41. The system MUST add a `DEVICE_COOKIE_NAME` config setting with default `screens_device`.
+42. The system MUST add a `DEVICE_LAST_SEEN_INTERVAL` config setting (duration, default `1m`) controlling how often `last_seen_at` is allowed to be re-written for the same device.
+43. The system MUST add a `DEVICE_LANDING_URL` config setting with default `/device/`. Validation MUST reject empty values and values that do not start with `/`.
+44. No new secret-bearing config is required (device tokens live in the database).
 
 ## Non-Functional Requirements
 
@@ -144,20 +171,39 @@ Without this spec, no device-facing feature in Phase 2 (Screen Display, page rot
 - [ ] AC-25: When an admin GETs `/admin/devices`, then the page lists all non-revoked devices showing name and last-seen timestamp.
 - [ ] AC-26: When an admin POSTs the create-device form with a valid name, then the resulting page contains the raw token in copyable form along with explicit "save this now -- it will not be shown again" wording.
 
+### Browser Enrollment
+
+- [ ] AC-27: Given an admin caller with a valid session cookie and a valid CSRF token, when they POST to the enroll-browser endpoint for an existing non-revoked device, then the response is a 302 to the device landing URL, the response sets the device cookie to the freshly issued raw token, and the response clears the admin session cookie (MaxAge -1).
+- [ ] AC-28: After AC-27, when the database is inspected, then the admin session row used for the enrolling request is no longer present (orphan-free).
+- [ ] AC-29: After AC-27, when the same browser issues a follow-up request to the device landing URL with only the device cookie, then the request is authenticated as the enrolled device (`IdentityFromContext.IsDevice() == true`) and the device's name appears in the response.
+- [ ] AC-30: Given the admin from AC-27 also has a session on a SECOND browser (e.g., their laptop), when AC-27 completes, then the second browser's session is unaffected and continues to authenticate (the only session deleted is the one used to call enroll-browser).
+- [ ] AC-31: When an admin POSTs the enroll-browser endpoint targeting a device whose `revoked_at` is non-NULL, then the response is a 302 to `/admin/devices?error=...`, the admin session cookie is NOT cleared, the device cookie is NOT set, and the admin's session row is NOT deleted.
+- [ ] AC-32: When an unauthenticated client POSTs the enroll-browser endpoint, then the response is the standard `RequireAuth` failure (302 to login for HTML, 401 otherwise) and no cookies are mutated.
+- [ ] AC-33: When a member (non-admin) authenticated user POSTs the enroll-browser endpoint, then the response is 403 and no cookies are mutated.
+- [ ] AC-34: When a GET request is sent to the enroll-browser path, then the response is 405 Method Not Allowed (or the route simply does not match GET, which yields 404). The admin session is NOT terminated and the device cookie is NOT set.
+- [ ] AC-35: When an admin POSTs enroll-browser without a valid `_csrf` field, then the request is rejected with 403 by the existing CSRF middleware and no cookies are mutated.
+- [ ] AC-36: When an admin POSTs enroll-browser from a browser that already has a device cookie for some OTHER device, then the response sets the device cookie to the newly enrolled device's token (replacing the previous value) and clears the admin session cookie.
+- [ ] AC-37: When an admin POSTs the "create-and-enroll-this-browser" form with a valid device name, then a new device row is created AND the same response performs the cookie swap and 302-redirect to the device landing URL.
+- [ ] AC-38: When a request without any auth cookie hits the device landing URL, then the response is the standard `RequireAuth` failure (302 to login for HTML, 401 otherwise). (This makes the landing URL safe to publish.)
+
 ### Configuration
 
-- [ ] AC-27: When `DEVICE_COOKIE_NAME` is not set, then the cookie name defaults to `screens_device`.
-- [ ] AC-28: When `DEVICE_LAST_SEEN_INTERVAL` is set to `5m`, then `last_seen_at` is throttled to once per 5 minutes per device.
+- [ ] AC-39: When `DEVICE_COOKIE_NAME` is not set, then the cookie name defaults to `screens_device`.
+- [ ] AC-40: When `DEVICE_LAST_SEEN_INTERVAL` is set to `5m`, then `last_seen_at` is throttled to once per 5 minutes per device.
+- [ ] AC-41: When `DEVICE_LANDING_URL` is not set, then the default landing URL is `/device/`. When set to a non-`/`-prefixed string, validation fails.
 
 ## Out of Scope
 
-- Self-registration of devices (admin-driven only).
+- Self-registration of devices without an admin present (admin-driven only -- either via token-copy or via in-person browser enrollment).
+- QR-code or PIN-based pairing flows. The browser-enrollment flow assumes the admin can physically reach the kiosk and authenticate on it directly. A remote/headless pairing flow is not in scope.
 - Per-screen assignment of devices to specific screens (lives in Phase 2 Screen Model).
 - mTLS or client-cert auth (token-based is sufficient for a household).
 - Token expiry / rotation policy (devices live for years; manual revocation is enough).
 - Push commands from the server to a specific device (lives in Phase 4 Push Notifications).
 - Device groups / fleets / labels.
+- The actual screen display content at the device landing URL. Phase 1 ships a placeholder page; Phase 2 Screen Display replaces its body.
 - A device API for the device itself to fetch its own configuration (that is the Phase 2 Screen Display spec).
+- "Un-enrolling" a browser back into an admin session (the admin signs into the admin URL again on a different browser if they need admin access; revoking the device on an enrolled browser leaves that browser unauthenticated, and the admin can sign in fresh from there).
 
 ## Dependencies
 
@@ -170,6 +216,9 @@ Without this spec, no device-facing feature in Phase 2 (Screen Display, page rot
 All resolved.
 
 - Q1 **Resolved**: Auth Middleware is folded into this spec. The roadmap entry is satisfied here. PHASE.md is updated to remove the separate row.
-- Q2 **Resolved**: A single device cookie is acceptable in addition to bearer header. The cookie is set out-of-band by the admin (or pasted in by the device's browser) and is HttpOnly. We do not gate it behind dev-mode the way the admin session cookie is gated, because device displays are typically on local-network HTTPS-via-reverse-proxy or plain HTTP on a trusted LAN; cookie `Secure` follows the same `!cfg.Log.DevMode` rule as the admin session.
+- Q2 **Resolved**: A single device cookie is acceptable in addition to bearer header. The cookie is HttpOnly. The primary mechanism for setting it on a real wall-mounted kiosk is the in-person browser-enrollment flow (see "Browser Enrollment" requirements 31-40). Programmatic clients can still copy the raw token shown at create time. Cookie `Secure` follows the same `!cfg.Log.DevMode` rule as the admin session.
 - Q3 **Resolved**: Token presentation uses 64-character hex (32 bytes). This matches the existing `auth.GenerateToken` so the same crypto primitive can be reused.
 - Q4 **Resolved**: `last_seen_at` is throttled at the application layer (not via DB trigger) so the behaviour is testable in Go.
+- Q5 **Resolved**: The browser-enrollment endpoint is POST-only and CSRF-protected. A GET-triggered or non-CSRF-protected enrollment would let an attacker downgrade an admin's browser into a device by tricking the admin into clicking a link or submitting a forged form. POST + CSRF is the same defence we use for every other admin state-changing endpoint, so it imposes no new burden.
+- Q6 **Resolved**: The admin's session in the database is keyed by the cookie that the kiosk's browser was sending. Calling `auth.Service.Logout` with that cookie value before the cookie is cleared deletes only THAT row. Other sessions for the same admin (e.g., on a laptop) are unaffected.
+- Q7 **Resolved**: Post-enrollment landing URL is `/device/` by default and is configurable via `DEVICE_LANDING_URL`. Phase 1 ships a placeholder template at that URL; Phase 2 Screen Display will replace the body. The handler is gated by `RequireAuth` only (no `RequireRole`), so a device identity is sufficient.

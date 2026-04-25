@@ -3,7 +3,7 @@ id: TASK-008
 title: "Session and CSRF middleware"
 spec: SPEC-002
 arch: ARCH-002
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-006]
 skills: [add-middleware, green-bar]

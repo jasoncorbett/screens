@@ -2,7 +2,7 @@
 id: SPEC-002
 title: "Admin Auth"
 phase: 1
-status: draft
+status: accepted
 priority: p0
 created: 2026-04-20
 author: pm

@@ -17,8 +17,9 @@ Establish persistent storage, admin authentication, and device authentication. A
 |----|-------|--------|----------|
 | SPEC-001 | Storage Engine | accepted | p0 |
 | SPEC-002 | Admin Auth | draft | p0 |
-| | Device Auth | | p0 |
-| | Auth Middleware | | p0 |
+| SPEC-003 | Device Auth | draft | p0 |
+
+> The roadmap originally listed "Auth Middleware" as a separate spec. It is folded into SPEC-003 because the unified middleware is what makes the second identity kind (devices) coexist cleanly with admin sessions; designing them together avoids two parallel auth stacks. SPEC-003 explicitly delivers the unified `RequireAuth` and the `Identity` context type that the rest of the system depends on.
 
 ## Dependencies
 

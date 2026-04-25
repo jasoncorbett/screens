@@ -11,6 +11,15 @@ import (
 	"github.com/jasoncorbett/screens/internal/db"
 )
 
+// ErrUserNotFound is returned when an operation targets a user ID that does
+// not exist (e.g., DeactivateUser called with a stale or fabricated ID).
+var ErrUserNotFound = errors.New("user not found")
+
+// ErrInvitationNotFound is returned when an operation targets an invitation ID
+// that does not exist (e.g., RevokeInvitation called with a stale or
+// fabricated ID).
+var ErrInvitationNotFound = errors.New("invitation not found")
+
 // Config holds auth-related configuration.
 type Config struct {
 	AdminEmail      string
@@ -207,14 +216,29 @@ func (s *Service) InviteUser(ctx context.Context, email string, role Role, invit
 	})
 }
 
-// RevokeInvitation deletes a pending invitation.
+// RevokeInvitation deletes a pending invitation. Returns ErrInvitationNotFound
+// if no invitation with the given ID exists.
 func (s *Service) RevokeInvitation(ctx context.Context, invitationID string) error {
+	if _, err := s.queries.GetInvitationByID(ctx, invitationID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvitationNotFound
+		}
+		return fmt.Errorf("lookup invitation: %w", err)
+	}
 	return s.queries.DeleteInvitation(ctx, invitationID)
 }
 
 // DeactivateUser marks a user as inactive and deletes all their sessions.
 // Both operations run in a single transaction to prevent partial state.
+// Returns ErrUserNotFound if no user with the given ID exists.
 func (s *Service) DeactivateUser(ctx context.Context, userID string) error {
+	if _, err := s.queries.GetUserByID(ctx, userID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrUserNotFound
+		}
+		return fmt.Errorf("lookup user: %w", err)
+	}
+
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin transaction: %w", err)

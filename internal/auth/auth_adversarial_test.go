@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -209,10 +210,12 @@ func TestRevokeInvitation_NonexistentID(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestService(t)
 
-	// Revoking a non-existent invitation should not error (DELETE matches zero rows).
+	// Revoking a non-existent invitation must return ErrInvitationNotFound so
+	// callers (e.g. handlers) can surface a real error to users instead of
+	// silently reporting success.
 	err := svc.RevokeInvitation(context.Background(), "nonexistent-id")
-	if err != nil {
-		t.Fatalf("RevokeInvitation() with nonexistent ID: %v", err)
+	if !errors.Is(err, ErrInvitationNotFound) {
+		t.Fatalf("RevokeInvitation() with nonexistent ID: err = %v, want ErrInvitationNotFound", err)
 	}
 }
 
@@ -220,11 +223,11 @@ func TestDeactivateUser_NonexistentUserID(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestService(t)
 
-	// Deactivating a non-existent user should not panic. The current implementation
-	// runs a DELETE + UPDATE that match zero rows with no error.
+	// Deactivating a non-existent user must return ErrUserNotFound so callers
+	// can avoid telling the operator "user deactivated" when nothing happened.
 	err := svc.DeactivateUser(context.Background(), "nonexistent-id")
-	if err != nil {
-		t.Fatalf("DeactivateUser() with nonexistent ID: %v", err)
+	if !errors.Is(err, ErrUserNotFound) {
+		t.Fatalf("DeactivateUser() with nonexistent ID: err = %v, want ErrUserNotFound", err)
 	}
 }
 

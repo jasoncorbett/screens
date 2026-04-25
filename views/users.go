@@ -1,6 +1,7 @@
 package views
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -107,6 +108,10 @@ func handleDeactivate(authSvc *auth.Service) http.HandlerFunc {
 		}
 
 		if err := authSvc.DeactivateUser(ctx, userID); err != nil {
+			if errors.Is(err, auth.ErrUserNotFound) {
+				http.Redirect(w, r, "/admin/users?error=User+not+found", http.StatusFound)
+				return
+			}
 			slog.Error("deactivate user", "err", err, "user_id", userID)
 			http.Redirect(w, r, "/admin/users?error=Could+not+deactivate+user", http.StatusFound)
 			return
@@ -133,6 +138,10 @@ func handleRevokeInvitation(authSvc *auth.Service) http.HandlerFunc {
 		}
 
 		if err := authSvc.RevokeInvitation(ctx, invitationID); err != nil {
+			if errors.Is(err, auth.ErrInvitationNotFound) {
+				http.Redirect(w, r, "/admin/users?error=Invitation+not+found", http.StatusFound)
+				return
+			}
 			slog.Error("revoke invitation", "err", err, "invitation_id", invitationID)
 			http.Redirect(w, r, "/admin/users?error=Could+not+revoke+invitation", http.StatusFound)
 			return

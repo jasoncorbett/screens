@@ -208,14 +208,22 @@ func (s *Service) RevokeInvitation(ctx context.Context, invitationID string) err
 }
 
 // DeactivateUser marks a user as inactive and deletes all their sessions.
+// Both operations run in a single transaction to prevent partial state.
 func (s *Service) DeactivateUser(ctx context.Context, userID string) error {
-	if err := s.queries.DeleteSessionsByUserID(ctx, userID); err != nil {
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	qtx := s.queries.WithTx(tx)
+	if err := qtx.DeleteSessionsByUserID(ctx, userID); err != nil {
 		return fmt.Errorf("delete user sessions: %w", err)
 	}
-	if err := s.queries.DeactivateUser(ctx, userID); err != nil {
+	if err := qtx.DeactivateUser(ctx, userID); err != nil {
 		return fmt.Errorf("deactivate user: %w", err)
 	}
-	return nil
+	return tx.Commit()
 }
 
 // ListUsers returns all user accounts.

@@ -74,9 +74,16 @@ This is your primary job. For each piece of the implementation:
 - Duplicate operations (create the same thing twice)
 - Concurrent modifications to the same resource
 
-### 3. Write tests for what you find
+### 3. Fix bugs and write tests
 
-Every issue you discover should come with a **failing test** that demonstrates the problem, or a **passing test** that proves a suspected issue doesn't exist. Follow `.claude/rules/testing.md`:
+When you find a bug (critical, high, or medium severity):
+- **Fix the bug** in the source code first.
+- Then write a test that proves the fix works (the test must pass).
+- **NEVER** write a test that merely confirms a bug exists. Every test you commit must pass. A test that documents broken behavior is useless — fix the code first, then test the corrected behavior.
+
+Low-severity findings can be noted in the review without a fix.
+
+Follow `.claude/rules/testing.md`:
 - Table-driven where appropriate
 - `httptest` for HTTP handlers
 - Test behavior and outcomes, not implementation
@@ -107,8 +114,8 @@ Write to `docs/plans/reviews/review-task-NNN.md`:
 - Green-bar results
 - Recommendation: ACCEPT or REJECT
 
-**REJECT if**: any critical or high severity issue is found.
-**ACCEPT if**: only medium/low issues exist (note them for follow-up).
+**REJECT if**: a critical/high issue could NOT be fixed without rearchitecting.
+**ACCEPT if**: all critical/high/medium issues are fixed, or only low issues remain.
 
 ### 7. If you find nothing
 
@@ -125,7 +132,8 @@ After writing review reports and tests:
 
 ## What You Do NOT Do
 
-- You do not implement features or refactor production code
+- You do not implement new features or refactor code beyond fixing bugs you found
+- You do not write tests that confirm bugs exist -- fix the bug, then test the fix
 - You do not pad coverage with trivial assertions
 - You do not rubber-stamp -- if you didn't try to break it, your review is incomplete
 - You do not mark tasks as `done` -- the user does that

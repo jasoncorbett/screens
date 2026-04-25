@@ -167,11 +167,21 @@ Invoke the adversarial Tester agent to try to break the implementation.
      5. Test error paths: missing data, DB unavailable, duplicate operations
      6. Write tests for every issue you find or suspect
 
+     When you find a bug (critical, high, or medium severity):
+     - FIX the bug in the source code, then write a test that proves the fix.
+     - NEVER write a test that merely confirms a bug exists. Every test you
+       commit must pass. A test that documents broken behavior is useless —
+       fix the code first, then test the corrected behavior.
+
+     Low-severity findings can be noted in the review without a fix.
+
      Write review to: docs/plans/reviews/review-task-NNN.md
-     REJECT if any critical/high issues. ACCEPT if only medium/low.
+     REJECT only if a critical/high issue could NOT be fixed without
+     rearchitecting. Otherwise ACCEPT (with fixes applied).
      
-     After writing the review and tests, stage and commit with a descriptive
-     message following .claude/rules/git.md.
+     After writing fixes, tests, and the review, run green-bar to verify
+     everything passes. Stage and commit with a descriptive message
+     following .claude/rules/git.md.
    ")
    ```
 4. After the agent completes, **push and show the review report**.

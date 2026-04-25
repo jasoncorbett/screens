@@ -3,7 +3,7 @@ id: TASK-010
 title: "User management views (invite, deactivate, list)"
 spec: SPEC-002
 arch: ARCH-002
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-009]
 skills: [add-view, green-bar]

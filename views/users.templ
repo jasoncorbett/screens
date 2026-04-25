@@ -1,0 +1,107 @@
+
+package views
+
+import "github.com/jasoncorbett/screens/internal/auth"
+
+templ usersPage(users []auth.User, invitations []auth.Invitation, currentUser *auth.User, csrfToken string, msg string, errMsg string) {
+	@layout("Users - screens") {
+		<div class="hero">
+			<h1>User Management</h1>
+			<p class="description"><a href="/admin/">Back to Admin</a></p>
+		</div>
+		if msg != "" {
+			<div class="card" role="status">
+				<p>{ msg }</p>
+			</div>
+		}
+		if errMsg != "" {
+			<div class="card" role="alert">
+				<p>{ errMsg }</p>
+			</div>
+		}
+		<div class="card">
+			<h2>Invite User</h2>
+			<form method="POST" action="/admin/users/invite">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<label for="email">Email</label>
+				<input type="email" id="email" name="email" required placeholder="user@example.com"/>
+				<label for="role">Role</label>
+				<select id="role" name="role">
+					<option value="member">Member</option>
+					<option value="admin">Admin</option>
+				</select>
+				<button type="submit">Send Invitation</button>
+			</form>
+		</div>
+		<div class="card">
+			<h2>Users</h2>
+			<table>
+				<thead>
+					<tr>
+						<th>Email</th>
+						<th>Name</th>
+						<th>Role</th>
+						<th>Status</th>
+						<th>Created</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, u := range users {
+						<tr>
+							<td>{ u.Email }</td>
+							<td>{ u.DisplayName }</td>
+							<td>{ string(u.Role) }</td>
+							<td>
+								if u.Active {
+									Active
+								} else {
+									Inactive
+								}
+							</td>
+							<td>{ u.CreatedAt.Format("2006-01-02") }</td>
+							<td>
+								if u.Active && u.ID != currentUser.ID {
+									<form method="POST" action={ templ.SafeURL("/admin/users/" + u.ID + "/deactivate") }>
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Deactivate</button>
+									</form>
+								}
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		if len(invitations) > 0 {
+			<div class="card">
+				<h2>Pending Invitations</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>Email</th>
+							<th>Role</th>
+							<th>Invited</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, inv := range invitations {
+							<tr>
+								<td>{ inv.Email }</td>
+								<td>{ string(inv.Role) }</td>
+								<td>{ inv.CreatedAt.Format("2006-01-02") }</td>
+								<td>
+									<form method="POST" action={ templ.SafeURL("/admin/invitations/" + inv.ID + "/revoke") }>
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Revoke</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		}
+	}
+}

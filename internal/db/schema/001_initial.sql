@@ -1,0 +1,2 @@
+-- Seed schema: no domain tables yet.
+-- The schema_migrations table is created by the migration runner itself.

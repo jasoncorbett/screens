@@ -57,6 +57,23 @@ func TestOpenTestDB_ForeignKeysEnabled(t *testing.T) {
 	}
 }
 
+func TestOpenTestDB_AuthTablesExist(t *testing.T) {
+	db := OpenTestDB(t)
+
+	tables := []string{"users", "sessions", "invitations"}
+	for _, table := range tables {
+		var name string
+		err := db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&name)
+		if err != nil {
+			t.Errorf("table %q not created by migrations: %v", table, err)
+			continue
+		}
+		if name != table {
+			t.Errorf("expected table name %q, got %q", table, name)
+		}
+	}
+}
+
 func TestOpenTestDB_MultipleInstances(t *testing.T) {
 	db1 := OpenTestDB(t)
 	db2 := OpenTestDB(t)

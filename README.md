@@ -25,6 +25,12 @@ Configuration is environment-driven. In dev mode (`DEV_MODE=true`), a `.env` fil
 | `DB_MAX_OPEN_CONNS` | int | `1` | Maximum number of open database connections |
 | `DB_MAX_IDLE_CONNS` | int | `1` | Maximum number of idle database connections |
 | `DB_CONN_MAX_LIFETIME` | duration | `0` | Maximum connection lifetime (0 = no limit) |
+| `ADMIN_EMAIL` | string | *(required)* | Google email of the initial admin |
+| `GOOGLE_CLIENT_ID` | string | *(required)* | Google OAuth 2.0 client ID |
+| `GOOGLE_CLIENT_SECRET` | string | *(required)* | Google OAuth 2.0 client secret |
+| `GOOGLE_REDIRECT_URL` | string | *(required)* | Google OAuth callback URL |
+| `SESSION_DURATION` | duration | `168h` | Session lifetime |
+| `SESSION_COOKIE_NAME` | string | `screens_session` | Session cookie name |
 
 ## Health Check
 

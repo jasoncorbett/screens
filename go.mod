@@ -4,10 +4,12 @@ go 1.26
 
 require (
 	github.com/a-h/templ v0.3.1001
+	golang.org/x/oauth2 v0.36.0
 	modernc.org/sqlite v1.49.1
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

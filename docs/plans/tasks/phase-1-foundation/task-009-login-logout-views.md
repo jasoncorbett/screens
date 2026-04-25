@@ -3,7 +3,7 @@ id: TASK-009
 title: "Login/logout views and OAuth route handlers"
 spec: SPEC-002
 arch: ARCH-002
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-007, TASK-008]
 skills: [add-view, add-endpoint, green-bar]

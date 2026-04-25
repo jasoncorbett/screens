@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -24,6 +25,7 @@ type JWKSCache struct {
 	expiresAt time.Time
 	url       string
 	client    *http.Client
+	refreshMu sync.Mutex // serializes refresh calls to prevent thundering herd
 }
 
 // NewJWKSCache creates a JWKS cache that fetches keys from the given URL.
@@ -56,8 +58,22 @@ func (c *JWKSCache) GetKey(ctx context.Context, kid string) (*rsa.PublicKey, err
 		return key, nil
 	}
 
-	// Refresh keys.
-	if err := c.refresh(ctx); err != nil {
+	// Serialize refreshes to prevent thundering herd.
+	c.refreshMu.Lock()
+	// Double-check: another goroutine may have refreshed while we waited.
+	c.mu.RLock()
+	key, ok = c.keys[kid]
+	expired = time.Now().After(c.expiresAt)
+	c.mu.RUnlock()
+
+	if ok && !expired {
+		c.refreshMu.Unlock()
+		return key, nil
+	}
+
+	err := c.refresh(ctx)
+	c.refreshMu.Unlock()
+	if err != nil {
 		return nil, fmt.Errorf("refresh JWKS: %w", err)
 	}
 
@@ -98,8 +114,12 @@ func (c *JWKSCache) refresh(ctx context.Context) error {
 		return fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
 	}
 
+	// Limit response body to 1MB to prevent OOM from a compromised endpoint.
+	const maxJWKSBody = 1 << 20
+	limitedBody := io.LimitReader(resp.Body, maxJWKSBody)
+
 	var jwks jwksResponse
-	if err := json.NewDecoder(resp.Body).Decode(&jwks); err != nil {
+	if err := json.NewDecoder(limitedBody).Decode(&jwks); err != nil {
 		return fmt.Errorf("decode JWKS response: %w", err)
 	}
 

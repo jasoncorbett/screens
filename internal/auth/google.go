@@ -57,10 +57,18 @@ func (g *GoogleClient) ExchangeCode(ctx context.Context, code string) (string, e
 	return idToken, nil
 }
 
+// maxJWTSize limits the size of JWT tokens to prevent excessive memory allocation.
+// Google ID tokens are typically under 2KB; 64KB provides generous headroom.
+const maxJWTSize = 64 * 1024
+
 // ValidateIDToken verifies the ID token JWT and extracts user info.
 // Validates: signature (via Google's JWKS), expiry, audience, issuer.
 // Returns the user's email and display name.
 func (g *GoogleClient) ValidateIDToken(ctx context.Context, rawIDToken string, expectedAudience string) (email, displayName string, err error) {
+	if len(rawIDToken) > maxJWTSize {
+		return "", "", fmt.Errorf("JWT exceeds maximum size")
+	}
+
 	parts := strings.Split(rawIDToken, ".")
 	if len(parts) != 3 {
 		return "", "", fmt.Errorf("invalid JWT: expected 3 parts, got %d", len(parts))

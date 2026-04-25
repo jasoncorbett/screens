@@ -1,0 +1,20 @@
+
+package views
+
+templ adminPage(email, displayName, csrfToken string, isAdmin bool) {
+	@layout("Admin - screens") {
+		<div class="hero">
+			<h1>Admin</h1>
+			<p class="description">Welcome, { displayName } ({ email })</p>
+		</div>
+		<div class="card">
+			if isAdmin {
+				<p><a href="/admin/users">Manage Users</a></p>
+			}
+			<form method="POST" action="/admin/logout">
+				<input type="hidden" name="_csrf" value={ csrfToken }/>
+				<button type="submit">Logout</button>
+			</form>
+		</div>
+	}
+}

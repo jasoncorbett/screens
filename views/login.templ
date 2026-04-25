@@ -1,0 +1,19 @@
+
+package views
+
+templ loginPage(errorMsg string) {
+	@layout("Login - screens") {
+		<div class="hero">
+			<h1>screens</h1>
+			<p class="description">Sign in to access the admin dashboard</p>
+		</div>
+		if errorMsg != "" {
+			<div class="card" role="alert">
+				<p>{ errorMsg }</p>
+			</div>
+		}
+		<div class="card">
+			<a href="/auth/google/start" class="button">Sign in with Google</a>
+		</div>
+	}
+}

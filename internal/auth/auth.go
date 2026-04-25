@@ -35,6 +35,11 @@ func NewService(sqlDB *sql.DB, cfg Config) *Service {
 	}
 }
 
+// SessionDuration returns the configured session lifetime.
+func (s *Service) SessionDuration() time.Duration {
+	return s.config.SessionDuration
+}
+
 // CreateSession generates a new session for the given user.
 // Returns the raw token (for the cookie). The database stores only the hash.
 func (s *Service) CreateSession(ctx context.Context, userID string) (string, error) {

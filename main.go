@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jasoncorbett/screens/api"
+	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/config"
 	"github.com/jasoncorbett/screens/internal/db"
 	"github.com/jasoncorbett/screens/internal/logging"
@@ -56,10 +57,30 @@ func main() {
 		return api.HealthCheck{Name: "database", Status: status}
 	})
 
+	authSvc := auth.NewService(sqlDB, auth.Config{
+		AdminEmail:      cfg.Auth.AdminEmail,
+		SessionDuration: cfg.Auth.SessionDuration,
+		CookieName:      cfg.Auth.CookieName,
+		SecureCookie:    !cfg.Log.DevMode,
+	})
+
+	googleClient := auth.NewGoogleClient(
+		cfg.Auth.GoogleClientID,
+		cfg.Auth.GoogleClientSecret,
+		cfg.Auth.GoogleRedirectURL,
+	)
+
 	mux := http.NewServeMux()
 	api.AddRoutes(mux)
 
-	views.AddRoutes(mux)
+	views.AddRoutes(mux, &views.Deps{
+		Auth:         authSvc,
+		Google:       googleClient,
+		ClientID:     cfg.Auth.GoogleClientID,
+		CookieName:   cfg.Auth.CookieName,
+		SecureCookie: !cfg.Log.DevMode,
+	})
+
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler()))
 
 	srv := &http.Server{

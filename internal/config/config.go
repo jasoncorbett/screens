@@ -17,12 +17,15 @@ type Config struct {
 }
 
 type AuthConfig struct {
-	AdminEmail         string
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	SessionDuration    time.Duration
-	CookieName         string
+	AdminEmail             string
+	GoogleClientID         string
+	GoogleClientSecret     string
+	GoogleRedirectURL      string
+	SessionDuration        time.Duration
+	CookieName             string
+	DeviceCookieName       string
+	DeviceLastSeenInterval time.Duration
+	DeviceLandingURL       string
 }
 
 type DBConfig struct {
@@ -70,12 +73,15 @@ func Load() (Config, error) {
 			ConnMaxLifetime: envDuration("DB_CONN_MAX_LIFETIME", 0),
 		},
 		Auth: AuthConfig{
-			AdminEmail:         env("ADMIN_EMAIL", ""),
-			GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
-			GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
-			GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", ""),
-			SessionDuration:    envDuration("SESSION_DURATION", 168*time.Hour),
-			CookieName:         env("SESSION_COOKIE_NAME", "screens_session"),
+			AdminEmail:             env("ADMIN_EMAIL", ""),
+			GoogleClientID:         env("GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret:     env("GOOGLE_CLIENT_SECRET", ""),
+			GoogleRedirectURL:      env("GOOGLE_REDIRECT_URL", ""),
+			SessionDuration:        envDuration("SESSION_DURATION", 168*time.Hour),
+			CookieName:             env("SESSION_COOKIE_NAME", "screens_session"),
+			DeviceCookieName:       env("DEVICE_COOKIE_NAME", "screens_device"),
+			DeviceLastSeenInterval: envDuration("DEVICE_LAST_SEEN_INTERVAL", time.Minute),
+			DeviceLandingURL:       env("DEVICE_LANDING_URL", "/device/"),
 		},
 	}
 
@@ -108,6 +114,17 @@ func (c Config) Validate() error {
 	if c.Auth.SessionDuration < time.Minute {
 		errs = append(errs, "SESSION_DURATION must be at least 1 minute")
 	}
+	if c.Auth.DeviceCookieName == "" {
+		errs = append(errs, "DEVICE_COOKIE_NAME must not be empty")
+	}
+	if c.Auth.DeviceLastSeenInterval < 0 {
+		errs = append(errs, "DEVICE_LAST_SEEN_INTERVAL must not be negative")
+	}
+	if c.Auth.DeviceLandingURL == "" {
+		errs = append(errs, "DEVICE_LANDING_URL must not be empty")
+	} else if !strings.HasPrefix(c.Auth.DeviceLandingURL, "/") {
+		errs = append(errs, "DEVICE_LANDING_URL must start with /")
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration errors:\n  - %s", strings.Join(errs, "\n  - "))
@@ -121,12 +138,13 @@ func (c Config) String() string {
 		secret = ""
 	}
 	return fmt.Sprintf(
-		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s}",
+		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s DeviceCookieName:%s DeviceLastSeenInterval:%s DeviceLandingURL:%s}",
 		c.HTTP.Host, c.HTTP.Port,
 		c.Log.Level, c.Log.DevMode,
 		c.DB.Path,
 		c.Auth.AdminEmail, c.Auth.GoogleClientID, secret, c.Auth.GoogleRedirectURL,
 		c.Auth.SessionDuration, c.Auth.CookieName,
+		c.Auth.DeviceCookieName, c.Auth.DeviceLastSeenInterval, c.Auth.DeviceLandingURL,
 	)
 }
 

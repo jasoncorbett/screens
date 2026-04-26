@@ -3,7 +3,7 @@ id: TASK-011
 title: "Device config, migration, and sqlc queries"
 spec: SPEC-003
 arch: ARCH-003
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-config, add-migration, add-store, green-bar]

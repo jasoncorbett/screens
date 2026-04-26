@@ -4,6 +4,20 @@
 
 package db
 
+import (
+	"database/sql"
+)
+
+type Device struct {
+	ID         string
+	Name       string
+	TokenHash  string
+	CreatedBy  string
+	CreatedAt  string
+	LastSeenAt sql.NullString
+	RevokedAt  sql.NullString
+}
+
 type Invitation struct {
 	ID        string
 	Email     string

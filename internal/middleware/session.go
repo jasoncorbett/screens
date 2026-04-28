@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -47,24 +48,53 @@ func RequireAuth(authService *auth.Service, sessionCookie, deviceCookie, loginUR
 			}
 
 			// 2. Authorization: Bearer <token>.
+			//    Track the most informative device-side failure so the final
+			//    log line can attribute the failure to the device probe (e.g.
+			//    "revoked") rather than always saying kind=none.
+			deviceKind, deviceReason := "none", ""
 			if raw := bearerToken(r); raw != "" {
-				if dev, err := authService.ValidateDeviceToken(r.Context(), raw); err == nil {
+				dev, err := authService.ValidateDeviceToken(r.Context(), raw)
+				if err == nil {
 					finishDevice(w, r, authService, next, dev)
 					return
 				}
+				deviceKind, deviceReason = "device", deviceFailureReason(err)
 			}
 
 			// 3. Device cookie.
 			if c, err := r.Cookie(deviceCookie); err == nil && c.Value != "" {
-				if dev, err := authService.ValidateDeviceToken(r.Context(), c.Value); err == nil {
+				dev, err := authService.ValidateDeviceToken(r.Context(), c.Value)
+				if err == nil {
 					finishDevice(w, r, authService, next, dev)
 					return
 				}
+				// Prefer the bearer reason if it was already populated.
+				if deviceReason == "" {
+					deviceKind, deviceReason = "device", deviceFailureReason(err)
+				}
 			}
 
-			slog.Info("auth failed", "kind", "none", "path", r.URL.Path)
+			if deviceReason != "" {
+				slog.Info("auth failed", "kind", deviceKind, "reason", deviceReason, "path", r.URL.Path)
+			} else {
+				slog.Info("auth failed", "kind", "none", "path", r.URL.Path)
+			}
 			denyUnauthenticated(w, r, sessionCookie, loginURL)
 		})
+	}
+}
+
+// deviceFailureReason converts a ValidateDeviceToken error into a sanitised
+// reason string suitable for an info-level log line. Raw token contents and
+// internal SQL details are deliberately not included.
+func deviceFailureReason(err error) string {
+	switch {
+	case errors.Is(err, auth.ErrDeviceRevoked):
+		return "revoked"
+	case errors.Is(err, auth.ErrDeviceNotFound):
+		return "unknown_token"
+	default:
+		return "lookup_error"
 	}
 }
 

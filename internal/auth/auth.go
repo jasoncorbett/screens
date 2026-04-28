@@ -398,13 +398,20 @@ func (s *Service) MarkDeviceSeen(ctx context.Context, deviceID string) error {
 }
 
 // RevokeDevice marks the device as revoked. Returns ErrDeviceNotFound when no
-// device with the given id exists.
+// device with the given id exists OR when the device row is present but its
+// revoked_at column is already non-NULL. Treating both cases identically lets
+// the UI surface a single "Device not found" flash and prevents a misleading
+// "revoked" success message on a no-op double-click.
 func (s *Service) RevokeDevice(ctx context.Context, deviceID string) error {
-	if _, err := s.queries.GetDeviceByID(ctx, deviceID); err != nil {
+	row, err := s.queries.GetDeviceByID(ctx, deviceID)
+	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrDeviceNotFound
 		}
 		return fmt.Errorf("lookup device: %w", err)
+	}
+	if row.RevokedAt.Valid {
+		return ErrDeviceNotFound
 	}
 	if err := s.queries.RevokeDevice(ctx, deviceID); err != nil {
 		return fmt.Errorf("revoke device: %w", err)

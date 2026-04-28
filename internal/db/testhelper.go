@@ -19,6 +19,12 @@ func OpenTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open test database: %v", err)
 	}
 
+	// SQLite ":memory:" is per-connection: each new pooled connection is a
+	// fresh, empty database. Pin the pool to a single connection so that
+	// migrations apply once and every subsequent statement (including from
+	// concurrent goroutines) sees the same schema and data.
+	db.SetMaxOpenConns(1)
+
 	if err := Migrate(context.Background(), db); err != nil {
 		db.Close()
 		t.Fatalf("migrate test database: %v", err)

@@ -237,11 +237,14 @@ func TestErrorMessages_DoNotLeakRawTokenOrHash(t *testing.T) {
 	}
 }
 
-// TestRevokeDevice_Idempotent documents that calling RevokeDevice twice does
-// not error -- the second call is a no-op because GetDeviceByID still finds
-// the (now-revoked) row and the UPDATE has WHERE revoked_at IS NULL. This is
-// the desired behaviour: the spec does not require a "double-revoke" error.
-func TestRevokeDevice_Idempotent(t *testing.T) {
+// TestRevokeDevice_AlreadyRevokedReturnsNotFound documents that calling
+// RevokeDevice a second time on the same device returns ErrDeviceNotFound,
+// distinguishing a no-op double-click from a real successful revocation. The
+// underlying SQL UPDATE has WHERE revoked_at IS NULL, so the revoked_at
+// column cannot move on the second call -- but the service surface
+// nevertheless reports the situation so the UI can render "Device not found"
+// instead of falsely re-flashing "Device revoked".
+func TestRevokeDevice_AlreadyRevokedReturnsNotFound(t *testing.T) {
 	t.Parallel()
 	svc, q, creator := newDeviceTestService(t, time.Minute)
 
@@ -257,15 +260,15 @@ func TestRevokeDevice_Idempotent(t *testing.T) {
 	first := row1.RevokedAt
 
 	// Sleep long enough that a second call would visibly bump revoked_at if
-	// the UPDATE were not gated on revoked_at IS NULL.
+	// the UPDATE were ever to fire on the already-revoked row.
 	time.Sleep(1100 * time.Millisecond)
 
-	if err := svc.RevokeDevice(context.Background(), dev.ID); err != nil {
-		t.Errorf("second RevokeDevice: %v, want nil (idempotent)", err)
+	if err := svc.RevokeDevice(context.Background(), dev.ID); !errors.Is(err, ErrDeviceNotFound) {
+		t.Errorf("second RevokeDevice err = %v, want ErrDeviceNotFound", err)
 	}
 	row2, _ := q.GetDeviceByID(context.Background(), dev.ID)
 	if row2.RevokedAt.String != first.String {
-		t.Errorf("revoked_at moved on second revoke: %q -> %q (UPDATE did not honour WHERE revoked_at IS NULL)",
+		t.Errorf("revoked_at moved on second revoke: %q -> %q (UPDATE must not fire when row is already revoked)",
 			first.String, row2.RevokedAt.String)
 	}
 }

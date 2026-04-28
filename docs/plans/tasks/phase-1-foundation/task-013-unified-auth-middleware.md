@@ -3,7 +3,7 @@ id: TASK-013
 title: "Unified RequireAuth middleware, CSRF device exemption, RequireDevice"
 spec: SPEC-003
 arch: ARCH-003
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-012]
 skills: [add-middleware, green-bar]

@@ -2,7 +2,7 @@
 id: SPEC-003
 title: "Device Auth"
 phase: 1
-status: draft
+status: accepted
 priority: p0
 created: 2026-04-25
 author: pm

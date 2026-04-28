@@ -3,7 +3,7 @@ id: TASK-014
 title: "Device management views (list, create, revoke)"
 spec: SPEC-003
 arch: ARCH-003
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-013]
 skills: [add-view, green-bar]

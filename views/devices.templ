@@ -1,0 +1,112 @@
+
+package views
+
+import "github.com/jasoncorbett/screens/internal/auth"
+
+templ devicesPage(devices []auth.Device, currentUser *auth.User, csrfToken string, msg string, errMsg string, newDeviceName string, newDeviceToken string) {
+	@layout("Devices - screens") {
+		<div class="hero">
+			<h1>Device Management</h1>
+			<p class="description"><a href="/admin/">Back to Admin</a></p>
+		</div>
+		if msg != "" {
+			<div class="card" role="status">
+				<p>{ msg }</p>
+			</div>
+		}
+		if errMsg != "" {
+			<div class="card" role="alert">
+				<p>{ errMsg }</p>
+			</div>
+		}
+		if newDeviceToken != "" {
+			<section>
+				<div class="card" role="alert">
+					<h2>Device "{ newDeviceName }" created</h2>
+					<p><strong>Save this token now.</strong> It will not be displayed again.</p>
+					<pre><code>{ newDeviceToken }</code></pre>
+				</div>
+			</section>
+		}
+		<section>
+			<div class="card">
+				<h2>Register Device</h2>
+				<form method="POST" action="/admin/devices">
+					<input type="hidden" name="_csrf" value={ csrfToken }/>
+					<label for="name">Name</label>
+					<input type="text" id="name" name="name" required placeholder="kitchen-tablet"/>
+					<button type="submit">Register Device</button>
+				</form>
+			</div>
+		</section>
+		<section>
+			<div class="card">
+				<h2>Active Devices</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>ID</th>
+							<th>Created</th>
+							<th>Last Seen</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, d := range devices {
+							if !d.IsRevoked() {
+								<tr>
+									<td>{ d.Name }</td>
+									<td>{ d.ID }</td>
+									<td>{ d.CreatedAt.Format("2006-01-02 15:04 MST") }</td>
+									<td>
+										if d.LastSeenAt != nil {
+											{ d.LastSeenAt.Format("2006-01-02 15:04 MST") }
+										} else {
+											never
+										}
+									</td>
+									<td>
+										<form method="POST" action={ templ.SafeURL("/admin/devices/" + d.ID + "/revoke") }>
+											<input type="hidden" name="_csrf" value={ csrfToken }/>
+											<button type="submit">Revoke</button>
+										</form>
+									</td>
+								</tr>
+							}
+						}
+					</tbody>
+				</table>
+			</div>
+		</section>
+		if hasRevokedDevices(devices) {
+			<section>
+				<div class="card">
+					<h2>Revoked Devices</h2>
+					<table>
+						<thead>
+							<tr>
+								<th>Name</th>
+								<th>ID</th>
+								<th>Created</th>
+								<th>Revoked At</th>
+							</tr>
+						</thead>
+						<tbody>
+							for _, d := range devices {
+								if d.IsRevoked() {
+									<tr>
+										<td>{ d.Name }</td>
+										<td>{ d.ID }</td>
+										<td>{ d.CreatedAt.Format("2006-01-02 15:04 MST") }</td>
+										<td>{ d.RevokedAt.Format("2006-01-02 15:04 MST") }</td>
+									</tr>
+								}
+							}
+						</tbody>
+					</table>
+				</div>
+			</section>
+		}
+	}
+}

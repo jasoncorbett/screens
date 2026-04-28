@@ -63,6 +63,14 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 	adminMux.Handle("/admin/users/", middleware.RequireRole(auth.RoleAdmin)(userMux))
 	adminMux.Handle("/admin/invitations/", middleware.RequireRole(auth.RoleAdmin)(userMux))
 
+	// Device management routes require admin role.
+	deviceMux := http.NewServeMux()
+	deviceMux.HandleFunc("GET /admin/devices", handleDeviceList(deps.Auth))
+	deviceMux.HandleFunc("POST /admin/devices", handleDeviceCreate(deps.Auth))
+	deviceMux.HandleFunc("POST /admin/devices/{id}/revoke", handleDeviceRevoke(deps.Auth))
+	adminMux.Handle("/admin/devices", middleware.RequireRole(auth.RoleAdmin)(deviceMux))
+	adminMux.Handle("/admin/devices/", middleware.RequireRole(auth.RoleAdmin)(deviceMux))
+
 	protected := middleware.RequireAuth(deps.Auth, deps.CookieName, deps.DeviceCookieName, "/admin/login")(
 		middleware.RequireCSRF()(adminMux),
 	)

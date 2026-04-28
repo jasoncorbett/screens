@@ -3,7 +3,7 @@ id: TASK-015
 title: "Browser enrollment endpoints and device landing page"
 spec: SPEC-003
 arch: ARCH-003
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-014]
 skills: [add-endpoint, add-view, green-bar]

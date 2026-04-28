@@ -41,6 +41,38 @@ templ devicesPage(devices []auth.Device, currentUser *auth.User, csrfToken strin
 		</section>
 		<section>
 			<div class="card">
+				<h2>Enroll This Browser as a Device</h2>
+				<p>
+					Use this when standing in front of a wall display: it signs you out
+					of the admin session on <strong>this browser only</strong> and
+					converts this browser into the named device. Your admin sessions on
+					other browsers (laptop, phone) are unaffected.
+				</p>
+				<form method="POST" action="/admin/devices/enroll-new-browser">
+					<input type="hidden" name="_csrf" value={ csrfToken }/>
+					<label for="enroll-new-name">Device name</label>
+					<input type="text" id="enroll-new-name" name="name" required placeholder="kitchen-tablet"/>
+					<button type="submit">Create new device and enroll this browser</button>
+				</form>
+				if hasActiveDevices(devices) {
+					<p>Or enroll this browser as an existing un-revoked device:</p>
+					<ul>
+						for _, d := range devices {
+							if !d.IsRevoked() {
+								<li>
+									<form method="POST" action={ templ.SafeURL("/admin/devices/" + d.ID + "/enroll-browser") }>
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Enroll this browser as "{ d.Name }"</button>
+									</form>
+								</li>
+							}
+						}
+					</ul>
+				}
+			</div>
+		</section>
+		<section>
+			<div class="card">
 				<h2>Active Devices</h2>
 				<table>
 					<thead>

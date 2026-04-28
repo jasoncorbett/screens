@@ -68,6 +68,8 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 	deviceMux.HandleFunc("GET /admin/devices", handleDeviceList(deps.Auth))
 	deviceMux.HandleFunc("POST /admin/devices", handleDeviceCreate(deps.Auth))
 	deviceMux.HandleFunc("POST /admin/devices/{id}/revoke", handleDeviceRevoke(deps.Auth))
+	deviceMux.HandleFunc("POST /admin/devices/{id}/enroll-browser", handleDeviceEnrollExisting(deps))
+	deviceMux.HandleFunc("POST /admin/devices/enroll-new-browser", handleDeviceEnrollNew(deps))
 	adminMux.Handle("/admin/devices", middleware.RequireRole(auth.RoleAdmin)(deviceMux))
 	adminMux.Handle("/admin/devices/", middleware.RequireRole(auth.RoleAdmin)(deviceMux))
 
@@ -75,4 +77,12 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 		middleware.RequireCSRF()(adminMux),
 	)
 	mux.Handle("/admin/", protected)
+
+	// Device landing route: gated by RequireAuth only -- a device identity
+	// is sufficient. NOT wrapped in RequireRole or RequireCSRF because the
+	// admin cookie has been cleared by the time the browser arrives.
+	landingHandler := middleware.RequireAuth(deps.Auth, deps.CookieName, deps.DeviceCookieName, "/admin/login")(
+		http.HandlerFunc(handleDeviceLanding(deps.Auth)),
+	)
+	mux.Handle("GET "+deps.DeviceLandingURL, landingHandler)
 }

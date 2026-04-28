@@ -267,6 +267,23 @@ func TestValidateDeviceFields(t *testing.T) {
 			errSubstr: "DEVICE_LANDING_URL must start with /",
 		},
 		{
+			// Defense-in-depth: an admin-controlled config is normally not an
+			// attack surface, but `//evil.com` is the classic open-redirect
+			// shape and the post-enrollment redirect uses this value verbatim.
+			// Reject protocol-relative URLs so a misconfigured deployment
+			// cannot send freshly enrolled kiosks off-host.
+			name:      "DeviceLandingURL protocol-relative rejected",
+			modify:    func(a *AuthConfig) { a.DeviceLandingURL = "//evil.com/path" },
+			wantErr:   true,
+			errSubstr: "DEVICE_LANDING_URL must be a same-origin path",
+		},
+		{
+			name:      "DeviceLandingURL backslash protocol-relative rejected",
+			modify:    func(a *AuthConfig) { a.DeviceLandingURL = "/\\evil.com" },
+			wantErr:   true,
+			errSubstr: "DEVICE_LANDING_URL must be a same-origin path",
+		},
+		{
 			name:    "all device fields valid passes",
 			modify:  func(a *AuthConfig) {},
 			wantErr: false,

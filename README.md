@@ -33,7 +33,7 @@ Configuration is environment-driven. In dev mode (`DEV_MODE=true`), a `.env` fil
 | `SESSION_COOKIE_NAME` | string | `screens_session` | Session cookie name |
 | `DEVICE_COOKIE_NAME` | string | `screens_device` | Device cookie name |
 | `DEVICE_LAST_SEEN_INTERVAL` | duration | `1m` | Throttle interval for updating a device's `last_seen_at` (0 means update on every auth) |
-| `DEVICE_LANDING_URL` | string | `/device/` | Path the browser-enrollment flow redirects newly enrolled devices to (must start with `/`) |
+| `DEVICE_LANDING_URL` | string | `/device/` | Path the browser-enrollment flow redirects newly enrolled devices to (must start with `/`; protocol-relative paths starting with `//` are rejected) |
 
 ## Health Check
 

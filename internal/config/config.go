@@ -126,6 +126,13 @@ func (c Config) Validate() error {
 		errs = append(errs, "DEVICE_LANDING_URL must not be empty")
 	} else if !strings.HasPrefix(c.Auth.DeviceLandingURL, "/") {
 		errs = append(errs, "DEVICE_LANDING_URL must start with /")
+	} else if strings.HasPrefix(c.Auth.DeviceLandingURL, "//") || strings.HasPrefix(c.Auth.DeviceLandingURL, "/\\") {
+		// Reject protocol-relative URLs (//evil.com) and `/` followed by a
+		// backslash (some browsers/old proxies parse `/\evil.com` as
+		// protocol-relative). The post-enrollment redirect uses this value
+		// verbatim; an attacker-controlled config could otherwise send the
+		// kiosk to an external host.
+		errs = append(errs, "DEVICE_LANDING_URL must be a same-origin path (must not begin with // or /\\)")
 	}
 
 	if len(errs) > 0 {

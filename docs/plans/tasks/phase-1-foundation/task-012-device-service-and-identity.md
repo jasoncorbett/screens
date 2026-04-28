@@ -3,7 +3,7 @@ id: TASK-012
 title: "Device service methods, Device + Identity types, context helpers"
 spec: SPEC-003
 arch: ARCH-003
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-011]
 skills: [green-bar]

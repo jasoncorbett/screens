@@ -12,9 +12,14 @@ import (
 // newDeviceTestService builds a Service backed by a fresh in-memory database
 // and a creator user with the given role. The interval controls the
 // MarkDeviceSeen throttle.
+//
+// MaxOpenConns is pinned to 1 because modernc.org/sqlite gives each new
+// connection its own private :memory: database; without this cap, parallel
+// goroutines that hit a fresh connection see "no such table: devices".
 func newDeviceTestService(t *testing.T, interval time.Duration) (*Service, *db.Queries, db.User) {
 	t.Helper()
 	sqlDB := db.OpenTestDB(t)
+	sqlDB.SetMaxOpenConns(1)
 	cfg := Config{
 		AdminEmail:             "admin@example.com",
 		SessionDuration:        time.Hour,

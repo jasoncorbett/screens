@@ -116,6 +116,8 @@ func (c Config) Validate() error {
 	}
 	if c.Auth.DeviceCookieName == "" {
 		errs = append(errs, "DEVICE_COOKIE_NAME must not be empty")
+	} else if !isValidCookieName(c.Auth.DeviceCookieName) {
+		errs = append(errs, "DEVICE_COOKIE_NAME contains characters not permitted in a cookie name")
 	}
 	if c.Auth.DeviceLastSeenInterval < 0 {
 		errs = append(errs, "DEVICE_LAST_SEEN_INTERVAL must not be negative")
@@ -146,6 +148,30 @@ func (c Config) String() string {
 		c.Auth.SessionDuration, c.Auth.CookieName,
 		c.Auth.DeviceCookieName, c.Auth.DeviceLastSeenInterval, c.Auth.DeviceLandingURL,
 	)
+}
+
+// isValidCookieName reports whether s is a non-empty token per RFC 6265 / RFC
+// 7230: ASCII printable characters excluding control chars and the separator
+// characters ( ) < > @ , ; : \ " / [ ] ? = { } and whitespace. The set is
+// what net/http.SetCookie silently requires; an invalid name causes
+// http.SetCookie to emit no header at all, which would silently break
+// device-cookie auth.
+func isValidCookieName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		// Reject non-printable / non-ASCII bytes.
+		if c <= 0x20 || c >= 0x7f {
+			return false
+		}
+		switch c {
+		case '(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/', '[', ']', '?', '=', '{', '}':
+			return false
+		}
+	}
+	return true
 }
 
 func env(key, fallback string) string {

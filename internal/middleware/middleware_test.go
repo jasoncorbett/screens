@@ -61,8 +61,9 @@ func TestRequireAuth_NoCookie(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -80,8 +81,9 @@ func TestRequireAuth_InvalidToken(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: "bogus-token-value"})
 	rr := httptest.NewRecorder()
 
@@ -100,7 +102,7 @@ func TestRequireAuth_ClearsInvalidCookie(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "bogus-token"})
 	rr := httptest.NewRecorder()
@@ -147,8 +149,9 @@ func TestRequireAuth_ExpiredSession(t *testing.T) {
 		t.Fatalf("insert expired session: %v", err)
 	}
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: rawToken})
 	rr := httptest.NewRecorder()
 
@@ -177,7 +180,7 @@ func TestRequireAuth_ValidSession(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := RequireAuth(svc, "session", "/login")(inner)
+	handler := RequireAuth(svc, "session", "device", "/login")(inner)
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: rawToken})
 	rr := httptest.NewRecorder()
@@ -489,7 +492,7 @@ func TestMiddlewareChain_Integration(t *testing.T) {
 	})
 
 	// Chain: RequireRole(admin) -> RequireCSRF -> RequireAuth -> inner
-	handler := RequireAuth(svc, "session", "/login")(
+	handler := RequireAuth(svc, "session", "device", "/login")(
 		RequireCSRF()(
 			RequireRole(auth.RoleAdmin)(inner),
 		),
@@ -529,7 +532,7 @@ func TestMiddlewareChain_MemberBlockedByAdminRole(t *testing.T) {
 		t.Fatalf("validate session: %v", err)
 	}
 
-	handler := RequireAuth(svc, "session", "/login")(
+	handler := RequireAuth(svc, "session", "device", "/login")(
 		RequireCSRF()(
 			RequireRole(auth.RoleAdmin)(okHandler()),
 		),

@@ -18,11 +18,13 @@ func registerRoute(r routeRegistrationFunc) {
 
 // Deps holds dependencies needed by auth-dependent view handlers.
 type Deps struct {
-	Auth         *auth.Service
-	Google       *auth.GoogleClient
-	ClientID     string
-	CookieName   string
-	SecureCookie bool
+	Auth             *auth.Service
+	Google           *auth.GoogleClient
+	ClientID         string
+	CookieName       string
+	DeviceCookieName string
+	DeviceLandingURL string
+	SecureCookie     bool
 }
 
 // AddRoutes registers all view routes on the given mux.
@@ -61,7 +63,7 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 	adminMux.Handle("/admin/users/", middleware.RequireRole(auth.RoleAdmin)(userMux))
 	adminMux.Handle("/admin/invitations/", middleware.RequireRole(auth.RoleAdmin)(userMux))
 
-	protected := middleware.RequireAuth(deps.Auth, deps.CookieName, "/admin/login")(
+	protected := middleware.RequireAuth(deps.Auth, deps.CookieName, deps.DeviceCookieName, "/admin/login")(
 		middleware.RequireCSRF()(adminMux),
 	)
 	mux.Handle("/admin/", protected)

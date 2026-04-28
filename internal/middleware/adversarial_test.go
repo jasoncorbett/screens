@@ -40,8 +40,9 @@ func TestRequireAuth_EmptyCookieValue(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: ""})
 	rr := httptest.NewRecorder()
 
@@ -60,8 +61,9 @@ func TestRequireAuth_VeryLongCookieValue(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	// A cookie value with 10K characters -- should not crash or panic.
 	req.AddCookie(&http.Cookie{Name: "session", Value: strings.Repeat("a", 10000)})
 	rr := httptest.NewRecorder()
@@ -77,8 +79,9 @@ func TestRequireAuth_NullByteInCookie(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: "valid\x00injected"})
 	rr := httptest.NewRecorder()
 
@@ -93,8 +96,9 @@ func TestRequireAuth_UnicodeInCookie(t *testing.T) {
 	t.Parallel()
 	svc, _ := newTestAuthService(t)
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: "\u0000\u0001\u0002\uFFFD"})
 	rr := httptest.NewRecorder()
 
@@ -121,8 +125,9 @@ func TestRequireAuth_DeactivatedUserDenied(t *testing.T) {
 		t.Fatalf("deactivate user: %v", err)
 	}
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: rawToken})
 	rr := httptest.NewRecorder()
 
@@ -155,7 +160,7 @@ func TestRequireAuth_ConcurrentRequests(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := RequireAuth(svc, "session", "/login")(inner)
+	handler := RequireAuth(svc, "session", "device", "/login")(inner)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
@@ -196,7 +201,7 @@ func TestRequireAuth_MultipleSessionCookies(t *testing.T) {
 	}
 
 	// Send two session cookies -- Go's r.Cookie returns the first one.
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: rawToken})
 	req.AddCookie(&http.Cookie{Name: "session", Value: "bogus-second"})
@@ -243,8 +248,9 @@ func TestRequireAuth_InactiveUser_RecreatedSession(t *testing.T) {
 		t.Fatalf("insert session: %v", err)
 	}
 
-	handler := RequireAuth(svc, "session", "/login")(okHandler())
+	handler := RequireAuth(svc, "session", "device", "/login")(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/protected", nil)
+	req.Header.Set("Accept", "text/html")
 	req.AddCookie(&http.Cookie{Name: "session", Value: rawToken})
 	rr := httptest.NewRecorder()
 
@@ -631,7 +637,7 @@ func TestMiddlewareChain_ValidPOSTWithAllMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	handler := RequireAuth(svc, "session", "/login")(
+	handler := RequireAuth(svc, "session", "device", "/login")(
 		RequireCSRF()(
 			RequireRole(auth.RoleAdmin)(inner),
 		),
@@ -679,7 +685,7 @@ func TestMiddlewareChain_ExpiredSessionClearedAndRedirected(t *testing.T) {
 		t.Fatalf("insert expired session: %v", err)
 	}
 
-	handler := RequireAuth(svc, "session", "/login")(
+	handler := RequireAuth(svc, "session", "device", "/login")(
 		RequireCSRF()(
 			RequireRole(auth.RoleAdmin)(okHandler()),
 		),
@@ -693,9 +699,10 @@ func TestMiddlewareChain_ExpiredSessionClearedAndRedirected(t *testing.T) {
 
 	handler.ServeHTTP(rr, req)
 
-	// Should redirect to login, not return 403.
-	if rr.Code != http.StatusFound {
-		t.Errorf("status = %d, want %d", rr.Code, http.StatusFound)
+	// POST with no valid credential is not an HTML navigation, so the
+	// middleware returns 401 (not 302) and clears the stale cookie.
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want %d", rr.Code, http.StatusUnauthorized)
 	}
 	// Cookie should be cleared.
 	cookies := rr.Result().Cookies()

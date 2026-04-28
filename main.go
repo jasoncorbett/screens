@@ -58,10 +58,13 @@ func main() {
 	})
 
 	authSvc := auth.NewService(sqlDB, auth.Config{
-		AdminEmail:      cfg.Auth.AdminEmail,
-		SessionDuration: cfg.Auth.SessionDuration,
-		CookieName:      cfg.Auth.CookieName,
-		SecureCookie:    !cfg.Log.DevMode,
+		AdminEmail:             cfg.Auth.AdminEmail,
+		SessionDuration:        cfg.Auth.SessionDuration,
+		CookieName:             cfg.Auth.CookieName,
+		SecureCookie:           !cfg.Log.DevMode,
+		DeviceCookieName:       cfg.Auth.DeviceCookieName,
+		DeviceLastSeenInterval: cfg.Auth.DeviceLastSeenInterval,
+		DeviceLandingURL:       cfg.Auth.DeviceLandingURL,
 	})
 
 	googleClient := auth.NewGoogleClient(
@@ -74,11 +77,13 @@ func main() {
 	api.AddRoutes(mux)
 
 	views.AddRoutes(mux, &views.Deps{
-		Auth:         authSvc,
-		Google:       googleClient,
-		ClientID:     cfg.Auth.GoogleClientID,
-		CookieName:   cfg.Auth.CookieName,
-		SecureCookie: !cfg.Log.DevMode,
+		Auth:             authSvc,
+		Google:           googleClient,
+		ClientID:         cfg.Auth.GoogleClientID,
+		CookieName:       cfg.Auth.CookieName,
+		DeviceCookieName: cfg.Auth.DeviceCookieName,
+		DeviceLandingURL: cfg.Auth.DeviceLandingURL,
+		SecureCookie:     !cfg.Log.DevMode,
 	})
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler()))

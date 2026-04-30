@@ -408,7 +408,12 @@ func TestProtectedRoutes_MultipleRoutes(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(path, func(t *testing.T) {
-			resp, err := client.Get(srv.URL + path)
+			req, err := http.NewRequest(http.MethodGet, srv.URL+path, nil)
+			if err != nil {
+				t.Fatalf("new request: %v", err)
+			}
+			req.Header.Set("Accept", "text/html")
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("GET %s: %v", path, err)
 			}

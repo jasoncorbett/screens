@@ -18,18 +18,23 @@ func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
 	t.Helper()
 	sqlDB := db.OpenTestDB(t)
 	svc := auth.NewService(sqlDB, auth.Config{
-		AdminEmail:      "admin@example.com",
-		SessionDuration: time.Hour,
-		CookieName:      "session",
-		SecureCookie:    false,
+		AdminEmail:             "admin@example.com",
+		SessionDuration:        time.Hour,
+		CookieName:             "session",
+		SecureCookie:           false,
+		DeviceCookieName:       "device",
+		DeviceLastSeenInterval: time.Minute,
+		DeviceLandingURL:       "/device/",
 	})
 	q := db.New(sqlDB)
 	return &Deps{
-		Auth:         svc,
-		Google:       nil, // tests that need Google use a mock server
-		ClientID:     "test-client-id",
-		CookieName:   "session",
-		SecureCookie: false,
+		Auth:             svc,
+		Google:           nil, // tests that need Google use a mock server
+		ClientID:         "test-client-id",
+		CookieName:       "session",
+		DeviceCookieName: "device",
+		DeviceLandingURL: "/device/",
+		SecureCookie:     false,
 	}, q
 }
 
@@ -413,7 +418,12 @@ func TestProtectedRoutes_RedirectWithoutAuth(t *testing.T) {
 		},
 	}
 
-	resp, err := client.Get(srv.URL + "/admin/")
+	req, err := http.NewRequest(http.MethodGet, srv.URL+"/admin/", nil)
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Accept", "text/html")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("GET /admin/: %v", err)
 	}

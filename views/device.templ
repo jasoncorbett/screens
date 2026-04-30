@@ -1,0 +1,15 @@
+
+package views
+
+templ deviceLandingPage(deviceName string) {
+	@layout("Device - screens") {
+		<main>
+			<div class="hero">
+				<h1>Enrolled</h1>
+			</div>
+			<div class="card">
+				<p>This browser is enrolled as <strong>{ deviceName }</strong>. The screen display will appear here once the screen feature ships.</p>
+			</div>
+		</main>
+	}
+}

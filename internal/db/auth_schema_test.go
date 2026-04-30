@@ -366,6 +366,114 @@ func TestDeleteExpiredSessions(t *testing.T) {
 	}
 }
 
+// TestDevicesTable_ExistsAfterMigration verifies the devices table is created
+// by migration 005, and that the unique index on token_hash exists. The unique
+// index is what guarantees a token-generation collision becomes a hard error
+// rather than a silent partition.
+func TestDevicesTable_ExistsAfterMigration(t *testing.T) {
+	database := OpenTestDB(t)
+
+	var name string
+	err := database.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='devices'").Scan(&name)
+	if err != nil {
+		t.Fatalf("devices table not created by migration: %v", err)
+	}
+	if name != "devices" {
+		t.Errorf("table name = %q, want %q", name, "devices")
+	}
+
+	// The UNIQUE constraint on token_hash creates an auto-index named
+	// sqlite_autoindex_devices_1; the explicit named index for lookups is
+	// idx_devices_token_hash. Verify the named index is present.
+	var idxName string
+	err = database.QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='index' AND name='idx_devices_token_hash'",
+	).Scan(&idxName)
+	if err != nil {
+		t.Fatalf("idx_devices_token_hash not created by migration: %v", err)
+	}
+
+	// And the revoked_at filter index.
+	err = database.QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='index' AND name='idx_devices_revoked_at'",
+	).Scan(&idxName)
+	if err != nil {
+		t.Fatalf("idx_devices_revoked_at not created by migration: %v", err)
+	}
+}
+
+// TestDevicesTable_TokenHashUniqueness verifies that the UNIQUE constraint on
+// devices.token_hash rejects a second insert with the same hash. This is the
+// schema-level guarantee that a (catastrophic) collision in the token generator
+// surfaces as a database integrity error rather than letting two devices share
+// a token.
+func TestDevicesTable_TokenHashUniqueness(t *testing.T) {
+	database := OpenTestDB(t)
+	q := New(database)
+	ctx := context.Background()
+
+	user, err := q.CreateUser(ctx, CreateUserParams{
+		ID:          "device-creator",
+		Email:       "creator@example.com",
+		DisplayName: "Creator",
+		Role:        "admin",
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	if err := q.CreateDevice(ctx, CreateDeviceParams{
+		ID:        "dev-1",
+		Name:      "Kitchen",
+		TokenHash: "shared-hash",
+		CreatedBy: user.ID,
+	}); err != nil {
+		t.Fatalf("create first device: %v", err)
+	}
+
+	if err := q.CreateDevice(ctx, CreateDeviceParams{
+		ID:        "dev-2",
+		Name:      "Living Room",
+		TokenHash: "shared-hash",
+		CreatedBy: user.ID,
+	}); err == nil {
+		t.Fatal("expected UNIQUE constraint violation for duplicate token_hash, got nil")
+	}
+}
+
+// TestDevicesTable_ForeignKeyRestrictsUserDelete verifies that ON DELETE
+// RESTRICT on devices.created_by prevents deletion of a user who still owns a
+// device. This is the inverse of the cascade pattern used elsewhere -- losing
+// device records by deleting an admin would silently shrink the device fleet.
+func TestDevicesTable_ForeignKeyRestrictsUserDelete(t *testing.T) {
+	database := OpenTestDB(t)
+	q := New(database)
+	ctx := context.Background()
+
+	user, err := q.CreateUser(ctx, CreateUserParams{
+		ID:          "owner",
+		Email:       "owner@example.com",
+		DisplayName: "Owner",
+		Role:        "admin",
+	})
+	if err != nil {
+		t.Fatalf("create user: %v", err)
+	}
+
+	if err := q.CreateDevice(ctx, CreateDeviceParams{
+		ID:        "owned-device",
+		Name:      "Owned",
+		TokenHash: "owned-hash",
+		CreatedBy: user.ID,
+	}); err != nil {
+		t.Fatalf("create device: %v", err)
+	}
+
+	if _, err := database.Exec("DELETE FROM users WHERE id = ?", user.ID); err == nil {
+		t.Fatal("expected RESTRICT to prevent deleting a user who owns a device, got nil")
+	}
+}
+
 // TestDeleteSessionsByUserID verifies bulk session deletion by user ID.
 func TestDeleteSessionsByUserID(t *testing.T) {
 	database := OpenTestDB(t)

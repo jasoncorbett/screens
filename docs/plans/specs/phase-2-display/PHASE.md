@@ -21,6 +21,9 @@ Build the screen, page, and widget infrastructure without specific widget implem
 | | Screen Display | | p0 |
 | | Widget Selection UI | | p1 |
 | | Theme Preview | | p1 |
+| | Typography Roles | | p1 |
+| | Page Backgrounds | | p1 |
+| | Card Theming | | p1 |
 
 ## Dependencies
 

@@ -179,11 +179,14 @@ The static demo page already uses CSS custom properties (`--bg`, `--surface`, `-
 - The `screens` table (lives in SPEC: Screen Model). This spec does not create the `screens.theme_id` foreign key; Screen Model adds it.
 - Per-screen theme selection UI (lives in Screen Display / Widget Selection UI).
 - A live "preview" of a theme as the admin edits it (lives in the Theme Preview spec, p1, later in Phase 2).
+- Per-role fonts (title, heading, body, time, money, alert). v1 carries a single `font_family` plus an optional `font_family_mono`. The Typography Roles spec (Phase 2, p1) extends the schema with role-specific font fields once widgets exist to pick a role.
+- Page background images (URL-referenced). v1 backgrounds are solid colors only -- the Page Backgrounds spec (Phase 2, p1) adds a per-page background-image field on the Page entity once Screen Model exists.
+- Card surface controls beyond `radius`: transparency/opacity, border color, border thickness, and a "no border" option. The Card Theming spec (Phase 2, p1) adds these fields to the theme schema.
 - Light / dark / auto mode switching driven by `prefers-color-scheme`. Themes are explicit picks; an admin who wants both makes two themes.
 - Importing / exporting themes as JSON (deferred to Phase 5 Config Export/Import).
 - A theme marketplace, gallery, or community sharing.
 - Per-widget theming. A widget inherits the screen's theme; it does not pick its own colors. (If this becomes desired later, a separate spec adds widget-level overrides.)
-- Image / pattern backgrounds. v1 backgrounds are solid colors only.
+- Image / pattern backgrounds. v1 backgrounds are solid colors only. (See the Page Backgrounds line above for the deferred follow-up.)
 - Animated theme transitions.
 - Spacing scale beyond `radius` in v1 (see requirement 15). A future spec may add a multiplier when widgets actually consume one.
 - A separate "theme version" or "revision" concept. Editing a theme mutates the row in place; downstream screens pick up the change on the next render.

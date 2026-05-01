@@ -415,21 +415,47 @@ func TestLoadThemeDefaultName(t *testing.T) {
 	}
 }
 
-// TestValidateThemeDefaultName verifies that an empty Theme.DefaultName is
-// rejected with an error message that names the offending env var.
+// TestValidateThemeDefaultName verifies that empty / whitespace-only
+// Theme.DefaultName values are rejected with an error message that names
+// the offending env var, while real names pass.
+//
+// Whitespace-only is a footgun: bare `== ""` would let `   ` through, and
+// downstream the value flows into the seed query as the theme's stored
+// name -- a value users cannot search for, distinguish from an unrelated
+// theme, or display meaningfully.
 func TestValidateThemeDefaultName(t *testing.T) {
-	cfg := Config{
-		HTTP:  HTTPConfig{Port: 8080},
-		DB:    DBConfig{Path: "screens.db"},
-		Auth:  validAuthConfig(),
-		Theme: ThemeConfig{DefaultName: ""},
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "empty rejected", value: "", wantErr: true},
+		{name: "single space rejected", value: " ", wantErr: true},
+		{name: "multi-space rejected", value: "    ", wantErr: true},
+		{name: "tab rejected", value: "\t", wantErr: true},
+		{name: "newline rejected", value: "\n", wantErr: true},
+		{name: "tab+space rejected", value: " \t ", wantErr: true},
+		{name: "literal 'default' accepted", value: "default", wantErr: false},
+		{name: "name with spaces accepted", value: "midnight blue", wantErr: false},
+		{name: "unicode accepted", value: "中文", wantErr: false},
 	}
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected validation error for empty Theme.DefaultName, got nil")
-	}
-	if !strings.Contains(err.Error(), "THEME_DEFAULT_NAME") {
-		t.Errorf("error %q does not mention THEME_DEFAULT_NAME", err.Error())
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  validAuthConfig(),
+				Theme: ThemeConfig{DefaultName: tt.value},
+			}
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate(DefaultName=%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), "THEME_DEFAULT_NAME") {
+				t.Errorf("error %q does not mention THEME_DEFAULT_NAME", err.Error())
+			}
+		})
 	}
 }
 

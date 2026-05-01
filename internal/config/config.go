@@ -143,7 +143,10 @@ func (c Config) Validate() error {
 		errs = append(errs, "DEVICE_LANDING_URL must be a same-origin path (must not begin with // or /\\)")
 	}
 
-	if c.Theme.DefaultName == "" {
+	if strings.TrimSpace(c.Theme.DefaultName) == "" {
+		// A whitespace-only value would pass the bare `== ""` check but is
+		// equally useless: it cannot be displayed, looked up, or shown in the
+		// admin UI without confusion. Treat it the same as empty.
 		errs = append(errs, "THEME_DEFAULT_NAME must not be empty")
 	}
 

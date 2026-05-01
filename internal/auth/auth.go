@@ -20,12 +20,23 @@ var ErrUserNotFound = errors.New("user not found")
 // fabricated ID).
 var ErrInvitationNotFound = errors.New("invitation not found")
 
+// ErrDeviceNotFound is returned when an operation targets a device id that
+// does not exist or, for rotation, has already been revoked.
+var ErrDeviceNotFound = errors.New("device not found")
+
+// ErrDeviceRevoked is returned by ValidateDeviceToken when the token belongs
+// to a device that has been revoked.
+var ErrDeviceRevoked = errors.New("device revoked")
+
 // Config holds auth-related configuration.
 type Config struct {
-	AdminEmail      string
-	SessionDuration time.Duration
-	CookieName      string
-	SecureCookie    bool
+	AdminEmail             string
+	SessionDuration        time.Duration
+	CookieName             string
+	SecureCookie           bool
+	DeviceCookieName       string
+	DeviceLastSeenInterval time.Duration
+	DeviceLandingURL       string
 }
 
 // Service orchestrates authentication operations.
@@ -302,6 +313,156 @@ func (s *Service) CleanExpiredSessions(ctx context.Context) (int64, error) {
 		return 0, fmt.Errorf("delete expired sessions: %w", err)
 	}
 	return result.RowsAffected()
+}
+
+// CreateDevice provisions a new device. It generates a random raw token,
+// stores its SHA-256 hash, and returns the new Device alongside the raw
+// token. The caller MUST surface the raw token to the admin once and then
+// discard it -- it cannot be recovered later.
+func (s *Service) CreateDevice(ctx context.Context, name, createdBy string) (Device, string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Device{}, "", fmt.Errorf("device name required")
+	}
+
+	rawToken, err := GenerateToken()
+	if err != nil {
+		return Device{}, "", fmt.Errorf("generate device token: %w", err)
+	}
+
+	id, err := generateID()
+	if err != nil {
+		return Device{}, "", fmt.Errorf("generate device id: %w", err)
+	}
+
+	if err := s.queries.CreateDevice(ctx, db.CreateDeviceParams{
+		ID:        id,
+		Name:      name,
+		TokenHash: HashToken(rawToken),
+		CreatedBy: createdBy,
+	}); err != nil {
+		return Device{}, "", fmt.Errorf("create device: %w", err)
+	}
+
+	row, err := s.queries.GetDeviceByID(ctx, id)
+	if err != nil {
+		return Device{}, "", fmt.Errorf("fetch created device: %w", err)
+	}
+	dev, err := deviceFromRow(row)
+	if err != nil {
+		return Device{}, "", fmt.Errorf("convert device: %w", err)
+	}
+	return dev, rawToken, nil
+}
+
+// ValidateDeviceToken hashes the raw token, looks it up, and returns the
+// associated Device on success. Returns ErrDeviceNotFound when no device row
+// matches and ErrDeviceRevoked when the matching device has been revoked.
+func (s *Service) ValidateDeviceToken(ctx context.Context, rawToken string) (*Device, error) {
+	row, err := s.queries.GetDeviceByTokenHash(ctx, HashToken(rawToken))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrDeviceNotFound
+		}
+		return nil, fmt.Errorf("lookup device: %w", err)
+	}
+
+	dev, err := deviceFromRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("convert device: %w", err)
+	}
+	if dev.IsRevoked() {
+		return nil, ErrDeviceRevoked
+	}
+	return &dev, nil
+}
+
+// MarkDeviceSeen updates last_seen_at on the device, but only if the previous
+// last_seen_at is older than the configured throttle interval (or NULL). A
+// throttled call that updates zero rows is not an error -- only true SQL
+// failures are surfaced.
+func (s *Service) MarkDeviceSeen(ctx context.Context, deviceID string) error {
+	seconds := int64(s.config.DeviceLastSeenInterval.Truncate(time.Second).Seconds())
+	if seconds < 0 {
+		seconds = 0
+	}
+	interval := fmt.Sprintf("-%d seconds", seconds)
+
+	if _, err := s.queries.TouchDeviceSeen(ctx, db.TouchDeviceSeenParams{
+		ID:       deviceID,
+		Datetime: interval,
+	}); err != nil {
+		return fmt.Errorf("touch device seen: %w", err)
+	}
+	return nil
+}
+
+// RevokeDevice marks the device as revoked. Returns ErrDeviceNotFound when no
+// device with the given id exists OR when the device row is present but its
+// revoked_at column is already non-NULL. Treating both cases identically lets
+// the UI surface a single "Device not found" flash and prevents a misleading
+// "revoked" success message on a no-op double-click.
+func (s *Service) RevokeDevice(ctx context.Context, deviceID string) error {
+	row, err := s.queries.GetDeviceByID(ctx, deviceID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrDeviceNotFound
+		}
+		return fmt.Errorf("lookup device: %w", err)
+	}
+	if row.RevokedAt.Valid {
+		return ErrDeviceNotFound
+	}
+	if err := s.queries.RevokeDevice(ctx, deviceID); err != nil {
+		return fmt.Errorf("revoke device: %w", err)
+	}
+	return nil
+}
+
+// ListDevices returns all devices, including revoked ones, in created_at
+// order.
+func (s *Service) ListDevices(ctx context.Context) ([]Device, error) {
+	rows, err := s.queries.ListDevices(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list devices: %w", err)
+	}
+	devices := make([]Device, 0, len(rows))
+	for _, row := range rows {
+		d, err := deviceFromRow(row)
+		if err != nil {
+			return nil, fmt.Errorf("convert device: %w", err)
+		}
+		devices = append(devices, d)
+	}
+	return devices, nil
+}
+
+// RotateDeviceToken issues a fresh raw token for the given device, replacing
+// the existing token_hash. Returns the raw token on success. Returns
+// ErrDeviceNotFound when the device id is unknown OR when the device has been
+// revoked -- both cases are equivalent for the caller (refuse the operation).
+// The returned raw token is the only opportunity for the caller to capture
+// it; it is not persisted in plaintext anywhere.
+func (s *Service) RotateDeviceToken(ctx context.Context, deviceID string) (string, error) {
+	rawToken, err := GenerateToken()
+	if err != nil {
+		return "", fmt.Errorf("generate device token: %w", err)
+	}
+	res, err := s.queries.RotateDeviceToken(ctx, db.RotateDeviceTokenParams{
+		TokenHash: HashToken(rawToken),
+		ID:        deviceID,
+	})
+	if err != nil {
+		return "", fmt.Errorf("rotate device token: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return "", fmt.Errorf("rotate device token rows: %w", err)
+	}
+	if n == 0 {
+		return "", ErrDeviceNotFound
+	}
+	return rawToken, nil
 }
 
 // generateID creates a random hex-encoded ID (16 bytes = 32 chars).

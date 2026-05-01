@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -146,6 +148,99 @@ func TestAuthConfigDefaultFormatLeaksSecret(t *testing.T) {
 	t.Log("NOTE: AuthConfig default formatting exposes GoogleClientSecret. " +
 		"Use Config.String() to get redacted output. " +
 		"Consider adding String() to AuthConfig for defense in depth.")
+}
+
+// TestValidateDeviceCookieNameRejectsInvalidChars verifies that Validate()
+// rejects DEVICE_COOKIE_NAME values containing characters that would cause
+// http.SetCookie to silently emit no Set-Cookie header. Without this check, a
+// misconfigured DEVICE_COOKIE_NAME (e.g. "  " or "screens device" with a
+// space) would make device-cookie auth silently no-op: the server would never
+// set a usable device cookie and the browser would never send one back.
+func TestValidateDeviceCookieNameRejectsInvalidChars(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "valid alnum and underscore", value: "screens_device", wantErr: false},
+		{name: "valid with hyphen", value: "screens-device", wantErr: false},
+		{name: "valid with dot", value: "screens.device", wantErr: false},
+		{name: "whitespace only rejected", value: "   ", wantErr: true},
+		{name: "single space rejected", value: " ", wantErr: true},
+		{name: "tab rejected", value: "\t", wantErr: true},
+		{name: "leading space rejected", value: " screens", wantErr: true},
+		{name: "embedded space rejected", value: "screens device", wantErr: true},
+		{name: "trailing space rejected", value: "screens ", wantErr: true},
+		{name: "semicolon rejected", value: "screens;device", wantErr: true},
+		{name: "equals rejected", value: "screens=device", wantErr: true},
+		{name: "comma rejected", value: "screens,device", wantErr: true},
+		{name: "double-quote rejected", value: "screens\"device", wantErr: true},
+		{name: "slash rejected", value: "screens/device", wantErr: true},
+		{name: "backslash rejected", value: "screens\\device", wantErr: true},
+		{name: "newline rejected", value: "screens\ndevice", wantErr: true},
+		{name: "null byte rejected", value: "screens\x00device", wantErr: true},
+		{name: "non-ASCII rejected", value: "screens\u00e9device", wantErr: true},
+		{name: "control char rejected", value: "screens\x01device", wantErr: true},
+		{name: "DEL rejected", value: "screens\x7fdevice", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			auth := validAuthConfig()
+			auth.DeviceCookieName = tt.value
+			cfg := Config{
+				HTTP: HTTPConfig{Port: 8080},
+				DB:   DBConfig{Path: "screens.db"},
+				Auth: auth,
+			}
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate(DeviceCookieName=%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), "DEVICE_COOKIE_NAME") {
+				t.Errorf("Validate(DeviceCookieName=%q) error message %q does not mention DEVICE_COOKIE_NAME", tt.value, err.Error())
+			}
+		})
+	}
+}
+
+// TestValidateDeviceCookieNameProducesSetCookieHeader is the regression test
+// for the silent-no-op bug: any value that passes Validate() MUST produce a
+// non-empty Set-Cookie header when handed to http.SetCookie. Without this
+// invariant, an "accepted" cookie name could still be unusable at runtime.
+func TestValidateDeviceCookieNameProducesSetCookieHeader(t *testing.T) {
+	candidates := []string{
+		"screens_device",
+		"screens-device",
+		"screens.device",
+		"a",
+		"AzZ09_-.+!#$%&'*^`|~",
+	}
+	for _, name := range candidates {
+		t.Run(name, func(t *testing.T) {
+			auth := validAuthConfig()
+			auth.DeviceCookieName = name
+			cfg := Config{
+				HTTP: HTTPConfig{Port: 8080},
+				DB:   DBConfig{Path: "screens.db"},
+				Auth: auth,
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Fatalf("Validate(DeviceCookieName=%q) returned %v; expected acceptance for round-trip test", name, err)
+			}
+
+			w := httptest.NewRecorder()
+			http.SetCookie(w, &http.Cookie{
+				Name:  cfg.Auth.DeviceCookieName,
+				Value: "token",
+				Path:  "/",
+			})
+			got := w.Header().Get("Set-Cookie")
+			if got == "" {
+				t.Errorf("http.SetCookie produced empty header for accepted DeviceCookieName=%q -- validation is letting through names http rejects silently", name)
+			}
+		})
+	}
 }
 
 // TestConfigStringEmptySecret verifies that when the secret is empty,

@@ -17,12 +17,15 @@ type Config struct {
 }
 
 type AuthConfig struct {
-	AdminEmail         string
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	SessionDuration    time.Duration
-	CookieName         string
+	AdminEmail             string
+	GoogleClientID         string
+	GoogleClientSecret     string
+	GoogleRedirectURL      string
+	SessionDuration        time.Duration
+	CookieName             string
+	DeviceCookieName       string
+	DeviceLastSeenInterval time.Duration
+	DeviceLandingURL       string
 }
 
 type DBConfig struct {
@@ -70,12 +73,15 @@ func Load() (Config, error) {
 			ConnMaxLifetime: envDuration("DB_CONN_MAX_LIFETIME", 0),
 		},
 		Auth: AuthConfig{
-			AdminEmail:         env("ADMIN_EMAIL", ""),
-			GoogleClientID:     env("GOOGLE_CLIENT_ID", ""),
-			GoogleClientSecret: env("GOOGLE_CLIENT_SECRET", ""),
-			GoogleRedirectURL:  env("GOOGLE_REDIRECT_URL", ""),
-			SessionDuration:    envDuration("SESSION_DURATION", 168*time.Hour),
-			CookieName:         env("SESSION_COOKIE_NAME", "screens_session"),
+			AdminEmail:             env("ADMIN_EMAIL", ""),
+			GoogleClientID:         env("GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret:     env("GOOGLE_CLIENT_SECRET", ""),
+			GoogleRedirectURL:      env("GOOGLE_REDIRECT_URL", ""),
+			SessionDuration:        envDuration("SESSION_DURATION", 168*time.Hour),
+			CookieName:             env("SESSION_COOKIE_NAME", "screens_session"),
+			DeviceCookieName:       env("DEVICE_COOKIE_NAME", "screens_device"),
+			DeviceLastSeenInterval: envDuration("DEVICE_LAST_SEEN_INTERVAL", time.Minute),
+			DeviceLandingURL:       env("DEVICE_LANDING_URL", "/device/"),
 		},
 	}
 
@@ -108,6 +114,26 @@ func (c Config) Validate() error {
 	if c.Auth.SessionDuration < time.Minute {
 		errs = append(errs, "SESSION_DURATION must be at least 1 minute")
 	}
+	if c.Auth.DeviceCookieName == "" {
+		errs = append(errs, "DEVICE_COOKIE_NAME must not be empty")
+	} else if !isValidCookieName(c.Auth.DeviceCookieName) {
+		errs = append(errs, "DEVICE_COOKIE_NAME contains characters not permitted in a cookie name")
+	}
+	if c.Auth.DeviceLastSeenInterval < 0 {
+		errs = append(errs, "DEVICE_LAST_SEEN_INTERVAL must not be negative")
+	}
+	if c.Auth.DeviceLandingURL == "" {
+		errs = append(errs, "DEVICE_LANDING_URL must not be empty")
+	} else if !strings.HasPrefix(c.Auth.DeviceLandingURL, "/") {
+		errs = append(errs, "DEVICE_LANDING_URL must start with /")
+	} else if strings.HasPrefix(c.Auth.DeviceLandingURL, "//") || strings.HasPrefix(c.Auth.DeviceLandingURL, "/\\") {
+		// Reject protocol-relative URLs (//evil.com) and `/` followed by a
+		// backslash (some browsers/old proxies parse `/\evil.com` as
+		// protocol-relative). The post-enrollment redirect uses this value
+		// verbatim; an attacker-controlled config could otherwise send the
+		// kiosk to an external host.
+		errs = append(errs, "DEVICE_LANDING_URL must be a same-origin path (must not begin with // or /\\)")
+	}
 
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration errors:\n  - %s", strings.Join(errs, "\n  - "))
@@ -121,13 +147,38 @@ func (c Config) String() string {
 		secret = ""
 	}
 	return fmt.Sprintf(
-		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s}",
+		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s DeviceCookieName:%s DeviceLastSeenInterval:%s DeviceLandingURL:%s}",
 		c.HTTP.Host, c.HTTP.Port,
 		c.Log.Level, c.Log.DevMode,
 		c.DB.Path,
 		c.Auth.AdminEmail, c.Auth.GoogleClientID, secret, c.Auth.GoogleRedirectURL,
 		c.Auth.SessionDuration, c.Auth.CookieName,
+		c.Auth.DeviceCookieName, c.Auth.DeviceLastSeenInterval, c.Auth.DeviceLandingURL,
 	)
+}
+
+// isValidCookieName reports whether s is a non-empty token per RFC 6265 / RFC
+// 7230: ASCII printable characters excluding control chars and the separator
+// characters ( ) < > @ , ; : \ " / [ ] ? = { } and whitespace. The set is
+// what net/http.SetCookie silently requires; an invalid name causes
+// http.SetCookie to emit no header at all, which would silently break
+// device-cookie auth.
+func isValidCookieName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		// Reject non-printable / non-ASCII bytes.
+		if c <= 0x20 || c >= 0x7f {
+			return false
+		}
+		switch c {
+		case '(', ')', '<', '>', '@', ',', ';', ':', '\\', '"', '/', '[', ']', '?', '=', '{', '}':
+			return false
+		}
+	}
+	return true
 }
 
 func env(key, fallback string) string {

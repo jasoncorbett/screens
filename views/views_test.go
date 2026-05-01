@@ -12,6 +12,7 @@ import (
 
 	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/db"
+	"github.com/jasoncorbett/screens/internal/themes"
 )
 
 func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
@@ -26,6 +27,10 @@ func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
 		DeviceLastSeenInterval: time.Minute,
 		DeviceLandingURL:       "/device/",
 	})
+	themesSvc := themes.NewService(sqlDB, themes.Config{DefaultName: "default"})
+	if err := themesSvc.EnsureDefault(context.Background()); err != nil {
+		t.Fatalf("seed default theme: %v", err)
+	}
 	q := db.New(sqlDB)
 	return &Deps{
 		Auth:             svc,
@@ -35,6 +40,7 @@ func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
 		DeviceCookieName: "device",
 		DeviceLandingURL: "/device/",
 		SecureCookie:     false,
+		Themes:           themesSvc,
 	}, q
 }
 

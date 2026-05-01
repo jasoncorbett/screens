@@ -16,6 +16,7 @@ import (
 	"github.com/jasoncorbett/screens/internal/config"
 	"github.com/jasoncorbett/screens/internal/db"
 	"github.com/jasoncorbett/screens/internal/logging"
+	"github.com/jasoncorbett/screens/internal/themes"
 	"github.com/jasoncorbett/screens/internal/version"
 
 	"github.com/jasoncorbett/screens/views"
@@ -73,6 +74,14 @@ func main() {
 		cfg.Auth.GoogleRedirectURL,
 	)
 
+	themesSvc := themes.NewService(sqlDB, themes.Config{
+		DefaultName: cfg.Theme.DefaultName,
+	})
+	if err := themesSvc.EnsureDefault(context.Background()); err != nil {
+		db.Close(sqlDB)
+		log.Fatalf("seed default theme: %v", err)
+	}
+
 	mux := http.NewServeMux()
 	api.AddRoutes(mux)
 
@@ -84,6 +93,7 @@ func main() {
 		DeviceCookieName: cfg.Auth.DeviceCookieName,
 		DeviceLandingURL: cfg.Auth.DeviceLandingURL,
 		SecureCookie:     !cfg.Log.DevMode,
+		Themes:           themesSvc,
 	})
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler()))

@@ -3,7 +3,7 @@ id: TASK-018
 title: "Theme admin views, route wiring, and main.go integration"
 spec: SPEC-004
 arch: ARCH-004
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-017]
 skills: [add-view, green-bar]

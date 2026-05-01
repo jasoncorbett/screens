@@ -23,6 +23,7 @@ func TestValidateAccumulatesMultipleErrors(t *testing.T) {
 			SessionDuration:    30 * time.Second,
 			CookieName:         "screens_session",
 		},
+		Theme: validThemeConfig(),
 	}
 
 	err := cfg.Validate()
@@ -63,9 +64,10 @@ func TestValidateSessionDurationBoundary(t *testing.T) {
 			auth := validAuthConfig()
 			auth.SessionDuration = tt.duration
 			cfg := Config{
-				HTTP: HTTPConfig{Port: 8080},
-				DB:   DBConfig{Path: "screens.db"},
-				Auth: auth,
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  auth,
+				Theme: validThemeConfig(),
 			}
 			err := cfg.Validate()
 			if (err != nil) != tt.wantErr {
@@ -189,9 +191,10 @@ func TestValidateDeviceCookieNameRejectsInvalidChars(t *testing.T) {
 			auth := validAuthConfig()
 			auth.DeviceCookieName = tt.value
 			cfg := Config{
-				HTTP: HTTPConfig{Port: 8080},
-				DB:   DBConfig{Path: "screens.db"},
-				Auth: auth,
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  auth,
+				Theme: validThemeConfig(),
 			}
 			err := cfg.Validate()
 			if (err != nil) != tt.wantErr {
@@ -221,9 +224,10 @@ func TestValidateDeviceCookieNameProducesSetCookieHeader(t *testing.T) {
 			auth := validAuthConfig()
 			auth.DeviceCookieName = name
 			cfg := Config{
-				HTTP: HTTPConfig{Port: 8080},
-				DB:   DBConfig{Path: "screens.db"},
-				Auth: auth,
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  auth,
+				Theme: validThemeConfig(),
 			}
 			if err := cfg.Validate(); err != nil {
 				t.Fatalf("Validate(DeviceCookieName=%q) returned %v; expected acceptance for round-trip test", name, err)

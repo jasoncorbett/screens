@@ -34,6 +34,23 @@ type Session struct {
 	ExpiresAt string
 }
 
+type Theme struct {
+	ID             string
+	Name           string
+	IsDefault      int64
+	ColorBg        string
+	ColorSurface   string
+	ColorBorder    string
+	ColorText      string
+	ColorTextMuted string
+	ColorAccent    string
+	FontFamily     string
+	FontFamilyMono string
+	Radius         string
+	CreatedAt      string
+	UpdatedAt      string
+}
+
 type User struct {
 	ID          string
 	Email       string

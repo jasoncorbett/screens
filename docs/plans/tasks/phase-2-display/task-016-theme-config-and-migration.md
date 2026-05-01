@@ -3,7 +3,7 @@ id: TASK-016
 title: "Theme config, migration, and sqlc queries"
 spec: SPEC-004
 arch: ARCH-004
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-config, add-migration, add-store, green-bar]

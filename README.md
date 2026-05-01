@@ -34,6 +34,7 @@ Configuration is environment-driven. In dev mode (`DEV_MODE=true`), a `.env` fil
 | `DEVICE_COOKIE_NAME` | string | `screens_device` | Device cookie name |
 | `DEVICE_LAST_SEEN_INTERVAL` | duration | `1m` | Throttle interval for updating a device's `last_seen_at` (0 means update on every auth) |
 | `DEVICE_LANDING_URL` | string | `/device/` | Path the browser-enrollment flow redirects newly enrolled devices to (must start with `/`; protocol-relative paths starting with `//` are rejected) |
+| `THEME_DEFAULT_NAME` | string | `default` | Name used for the auto-seeded default theme on first startup |
 
 ## Health Check
 

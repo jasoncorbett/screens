@@ -10,10 +10,11 @@ import (
 )
 
 type Config struct {
-	HTTP HTTPConfig
-	Log  LogConfig
-	DB   DBConfig
-	Auth AuthConfig
+	HTTP  HTTPConfig
+	Log   LogConfig
+	DB    DBConfig
+	Auth  AuthConfig
+	Theme ThemeConfig
 }
 
 type AuthConfig struct {
@@ -46,6 +47,10 @@ type HTTPConfig struct {
 type LogConfig struct {
 	Level   string
 	DevMode bool
+}
+
+type ThemeConfig struct {
+	DefaultName string
 }
 
 func Load() (Config, error) {
@@ -82,6 +87,9 @@ func Load() (Config, error) {
 			DeviceCookieName:       env("DEVICE_COOKIE_NAME", "screens_device"),
 			DeviceLastSeenInterval: envDuration("DEVICE_LAST_SEEN_INTERVAL", time.Minute),
 			DeviceLandingURL:       env("DEVICE_LANDING_URL", "/device/"),
+		},
+		Theme: ThemeConfig{
+			DefaultName: env("THEME_DEFAULT_NAME", "default"),
 		},
 	}
 
@@ -135,6 +143,10 @@ func (c Config) Validate() error {
 		errs = append(errs, "DEVICE_LANDING_URL must be a same-origin path (must not begin with // or /\\)")
 	}
 
+	if c.Theme.DefaultName == "" {
+		errs = append(errs, "THEME_DEFAULT_NAME must not be empty")
+	}
+
 	if len(errs) > 0 {
 		return fmt.Errorf("configuration errors:\n  - %s", strings.Join(errs, "\n  - "))
 	}
@@ -147,13 +159,14 @@ func (c Config) String() string {
 		secret = ""
 	}
 	return fmt.Sprintf(
-		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s DeviceCookieName:%s DeviceLastSeenInterval:%s DeviceLandingURL:%s}",
+		"HTTP{Host:%s Port:%d} Log{Level:%s DevMode:%v} DB{Path:%s} Auth{AdminEmail:%s GoogleClientID:%s GoogleClientSecret:%s GoogleRedirectURL:%s SessionDuration:%s CookieName:%s DeviceCookieName:%s DeviceLastSeenInterval:%s DeviceLandingURL:%s} Theme{DefaultName:%s}",
 		c.HTTP.Host, c.HTTP.Port,
 		c.Log.Level, c.Log.DevMode,
 		c.DB.Path,
 		c.Auth.AdminEmail, c.Auth.GoogleClientID, secret, c.Auth.GoogleRedirectURL,
 		c.Auth.SessionDuration, c.Auth.CookieName,
 		c.Auth.DeviceCookieName, c.Auth.DeviceLastSeenInterval, c.Auth.DeviceLandingURL,
+		c.Theme.DefaultName,
 	)
 }
 

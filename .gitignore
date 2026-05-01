@@ -5,3 +5,4 @@ screens
 *_templ.go
 static/**/*.gz
 
+screens.db

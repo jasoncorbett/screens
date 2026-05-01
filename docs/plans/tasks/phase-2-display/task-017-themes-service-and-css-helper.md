@@ -3,7 +3,7 @@ id: TASK-017
 title: "Themes service, validators, default seed, and CSS variables helper"
 spec: SPEC-004
 arch: ARCH-004
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-016]
 skills: [add-store, green-bar]

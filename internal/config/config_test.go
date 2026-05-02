@@ -77,6 +77,13 @@ func validAuthConfig() AuthConfig {
 	}
 }
 
+// validThemeConfig returns a ThemeConfig with all required fields populated.
+func validThemeConfig() ThemeConfig {
+	return ThemeConfig{
+		DefaultName: "default",
+	}
+}
+
 func TestValidateDBPath(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -98,9 +105,10 @@ func TestValidateDBPath(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Config{
-				HTTP: HTTPConfig{Port: 8080},
-				DB:   DBConfig{Path: tt.path},
-				Auth: validAuthConfig(),
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: tt.path},
+				Auth:  validAuthConfig(),
+				Theme: validThemeConfig(),
 			}
 			err := cfg.Validate()
 			if (err != nil) != tt.wantErr {
@@ -164,9 +172,10 @@ func TestValidateAuthFields(t *testing.T) {
 			auth := validAuthConfig()
 			tt.modify(&auth)
 			cfg := Config{
-				HTTP: HTTPConfig{Port: 8080},
-				DB:   DBConfig{Path: "screens.db"},
-				Auth: auth,
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  auth,
+				Theme: validThemeConfig(),
 			}
 			err := cfg.Validate()
 			if (err != nil) != tt.wantErr {
@@ -295,9 +304,10 @@ func TestValidateDeviceFields(t *testing.T) {
 			auth := validAuthConfig()
 			tt.modify(&auth)
 			cfg := Config{
-				HTTP: HTTPConfig{Port: 8080},
-				DB:   DBConfig{Path: "screens.db"},
-				Auth: auth,
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  auth,
+				Theme: validThemeConfig(),
 			}
 			err := cfg.Validate()
 			if (err != nil) != tt.wantErr {
@@ -367,5 +377,100 @@ func TestConfigStringRedactsSecret(t *testing.T) {
 	}
 	if !strings.Contains(s, "REDACTED") {
 		t.Errorf("Config.String() does not contain REDACTED: %s", s)
+	}
+}
+
+// TestLoadThemeDefaultName covers the env-var driven default and the override
+// path. Default is "default" when THEME_DEFAULT_NAME is unset; an override
+// value is reflected in the parsed config.
+func TestLoadThemeDefaultName(t *testing.T) {
+	tests := []struct {
+		name string
+		env  string // value for THEME_DEFAULT_NAME; "" means unset
+		want string
+	}{
+		{name: "default when unset", env: "", want: "default"},
+		{name: "override accepted", env: "onyx", want: "onyx"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("DEV_MODE", "false")
+			t.Setenv("ADMIN_EMAIL", "admin@example.com")
+			t.Setenv("GOOGLE_CLIENT_ID", "test-client-id")
+			t.Setenv("GOOGLE_CLIENT_SECRET", "test-client-secret")
+			t.Setenv("GOOGLE_REDIRECT_URL", "http://localhost:8080/auth/google/callback")
+			if tt.env != "" {
+				t.Setenv("THEME_DEFAULT_NAME", tt.env)
+			}
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load() returned unexpected error: %v", err)
+			}
+			if cfg.Theme.DefaultName != tt.want {
+				t.Errorf("Theme.DefaultName = %q, want %q", cfg.Theme.DefaultName, tt.want)
+			}
+		})
+	}
+}
+
+// TestValidateThemeDefaultName verifies that empty / whitespace-only
+// Theme.DefaultName values are rejected with an error message that names
+// the offending env var, while real names pass.
+//
+// Whitespace-only is a footgun: bare `== ""` would let `   ` through, and
+// downstream the value flows into the seed query as the theme's stored
+// name -- a value users cannot search for, distinguish from an unrelated
+// theme, or display meaningfully.
+func TestValidateThemeDefaultName(t *testing.T) {
+	tests := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "empty rejected", value: "", wantErr: true},
+		{name: "single space rejected", value: " ", wantErr: true},
+		{name: "multi-space rejected", value: "    ", wantErr: true},
+		{name: "tab rejected", value: "\t", wantErr: true},
+		{name: "newline rejected", value: "\n", wantErr: true},
+		{name: "tab+space rejected", value: " \t ", wantErr: true},
+		{name: "literal 'default' accepted", value: "default", wantErr: false},
+		{name: "name with spaces accepted", value: "midnight blue", wantErr: false},
+		{name: "unicode accepted", value: "中文", wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				HTTP:  HTTPConfig{Port: 8080},
+				DB:    DBConfig{Path: "screens.db"},
+				Auth:  validAuthConfig(),
+				Theme: ThemeConfig{DefaultName: tt.value},
+			}
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate(DefaultName=%q) error = %v, wantErr %v", tt.value, err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil && !strings.Contains(err.Error(), "THEME_DEFAULT_NAME") {
+				t.Errorf("error %q does not mention THEME_DEFAULT_NAME", err.Error())
+			}
+		})
+	}
+}
+
+// TestConfigStringIncludesTheme verifies that String() surfaces the theme
+// block. The default name is not a secret; it should be visible.
+func TestConfigStringIncludesTheme(t *testing.T) {
+	cfg := Config{
+		HTTP:  HTTPConfig{Host: "0.0.0.0", Port: 8080},
+		Log:   LogConfig{Level: "info"},
+		DB:    DBConfig{Path: "screens.db"},
+		Auth:  validAuthConfig(),
+		Theme: ThemeConfig{DefaultName: "midnight"},
+	}
+	s := cfg.String()
+	if !strings.Contains(s, "Theme{DefaultName:midnight}") {
+		t.Errorf("Config.String() missing theme block; got %s", s)
 	}
 }

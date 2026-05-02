@@ -1,0 +1,114 @@
+
+package views
+
+import (
+	"github.com/jasoncorbett/screens/internal/auth"
+	"github.com/jasoncorbett/screens/internal/themes"
+)
+
+templ themesPage(themesList []themes.Theme, currentUser *auth.User, csrfToken string, msg string, errMsg string, formInput themes.Input, formErrors map[string]string) {
+	@layout("Themes - screens") {
+		<div class="hero">
+			<h1>Theme Management</h1>
+			<p class="description"><a href="/admin/">Back to Admin</a></p>
+		</div>
+		if msg != "" {
+			<div class="card" role="status">
+				<p>{ msg }</p>
+			</div>
+		}
+		if errMsg != "" {
+			<div class="card" role="alert">
+				<p>{ errMsg }</p>
+			</div>
+		}
+		<section>
+			<div class="card">
+				<h2>Themes</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Default</th>
+							<th>Updated</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, t := range themesList {
+							<tr>
+								<td>{ t.Name }</td>
+								<td>
+									if t.IsDefault {
+										<strong>default</strong>
+									} else {
+										<form method="POST" action={ templ.SafeURL("/admin/themes/" + t.ID + "/set-default") } style="display:inline">
+											<input type="hidden" name="_csrf" value={ csrfToken }/>
+											<button type="submit">Set default</button>
+										</form>
+									}
+								</td>
+								<td>{ t.UpdatedAt.Format("2006-01-02 15:04 MST") }</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/themes/" + t.ID + "/edit") }>Edit</a>
+									if !t.IsDefault {
+										<form method="POST" action={ templ.SafeURL("/admin/themes/" + t.ID + "/delete") } style="display:inline">
+											<input type="hidden" name="_csrf" value={ csrfToken }/>
+											<button type="submit">Delete</button>
+										</form>
+									}
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</section>
+		<section>
+			<div class="card">
+				<h2>New Theme</h2>
+				@themeForm("/admin/themes", formInput, formErrors, csrfToken)
+			</div>
+		</section>
+	}
+}
+
+templ themeEditPage(t themes.Theme, currentUser *auth.User, csrfToken string, formInput themes.Input, formErrors map[string]string) {
+	@layout("Edit Theme - screens") {
+		<div class="hero">
+			<h1>Edit Theme: { t.Name }</h1>
+			<p class="description"><a href="/admin/themes">Back to Themes</a></p>
+		</div>
+		<section>
+			<div class="card">
+				@themeForm("/admin/themes/"+t.ID, formInput, formErrors, csrfToken)
+			</div>
+		</section>
+	}
+}
+
+templ themeForm(action string, in themes.Input, errs map[string]string, csrfToken string) {
+	<form method="POST" action={ templ.SafeURL(action) }>
+		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		@themeField("name", "Name", in.Name, errs["name"])
+		@themeField("color_bg", "Background color (hex)", in.ColorBg, errs["color_bg"])
+		@themeField("color_surface", "Surface color (hex)", in.ColorSurface, errs["color_surface"])
+		@themeField("color_border", "Border color (hex)", in.ColorBorder, errs["color_border"])
+		@themeField("color_text", "Text color (hex)", in.ColorText, errs["color_text"])
+		@themeField("color_text_muted", "Muted text color (hex)", in.ColorTextMuted, errs["color_text_muted"])
+		@themeField("color_accent", "Accent color (hex)", in.ColorAccent, errs["color_accent"])
+		@themeField("font_family", "Font family", in.FontFamily, errs["font_family"])
+		@themeField("radius", "Border radius (e.g. 10px)", in.Radius, errs["radius"])
+		<button type="submit">Save</button>
+	</form>
+}
+
+templ themeField(name, label, value, errMsg string) {
+	<label>
+		{ label }
+		<input type="text" name={ name } value={ value } required/>
+	</label>
+	if errMsg != "" {
+		<p class="error">{ errMsg }</p>
+	}
+}

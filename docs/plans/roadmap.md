@@ -43,6 +43,9 @@ Phase 1 (Foundation)
 | Screen Display | Device-facing renderer, page layout engine, auto-rotation with configurable interval | p0 |
 | Widget Selection UI | Admin UI to assign widgets to screen pages | p1 |
 | Theme Preview | Live preview of theme changes in admin UI | p1 |
+| Typography Roles | Per-role font choices in Theme System (title, heading, body, time, money, alert) so widgets can pick a role rather than a single global font | p1 |
+| Page Backgrounds | Per-page background image (URL) on the Page entity, with admin UI for setting/clearing | p1 |
+| Card Theming | Per-theme card surface controls: border radius, transparency/opacity, border color, border thickness, and "no border" option | p1 |
 
 **ADRs needed**: Widget interface design, screen layout approach
 

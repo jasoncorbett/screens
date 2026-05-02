@@ -15,12 +15,15 @@ Build the screen, page, and widget infrastructure without specific widget implem
 
 | ID | Title | Status | Priority |
 |----|-------|--------|----------|
-| | Theme System | | p0 |
+| SPEC-004 | Theme System | accepted | p0 |
 | | Widget Interface | | p0 |
 | | Screen Model | | p0 |
 | | Screen Display | | p0 |
 | | Widget Selection UI | | p1 |
 | | Theme Preview | | p1 |
+| | Typography Roles | | p1 |
+| | Page Backgrounds | | p1 |
+| | Card Theming | | p1 |
 
 ## Dependencies
 

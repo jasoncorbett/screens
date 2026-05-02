@@ -6,6 +6,7 @@ import (
 
 	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/middleware"
+	"github.com/jasoncorbett/screens/internal/themes"
 )
 
 type routeRegistrationFunc func(router *http.ServeMux)
@@ -25,6 +26,7 @@ type Deps struct {
 	DeviceCookieName string
 	DeviceLandingURL string
 	SecureCookie     bool
+	Themes           *themes.Service
 }
 
 // AddRoutes registers all view routes on the given mux.
@@ -72,6 +74,17 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 	deviceMux.HandleFunc("POST /admin/devices/enroll-new-browser", handleDeviceEnrollNew(deps))
 	adminMux.Handle("/admin/devices", middleware.RequireRole(auth.RoleAdmin)(deviceMux))
 	adminMux.Handle("/admin/devices/", middleware.RequireRole(auth.RoleAdmin)(deviceMux))
+
+	// Theme management routes require admin role.
+	themeMux := http.NewServeMux()
+	themeMux.HandleFunc("GET /admin/themes", handleThemeList(deps.Themes))
+	themeMux.HandleFunc("POST /admin/themes", handleThemeCreate(deps.Themes))
+	themeMux.HandleFunc("GET /admin/themes/{id}/edit", handleThemeEditForm(deps.Themes))
+	themeMux.HandleFunc("POST /admin/themes/{id}", handleThemeUpdate(deps.Themes))
+	themeMux.HandleFunc("POST /admin/themes/{id}/delete", handleThemeDelete(deps.Themes))
+	themeMux.HandleFunc("POST /admin/themes/{id}/set-default", handleThemeSetDefault(deps.Themes))
+	adminMux.Handle("/admin/themes", middleware.RequireRole(auth.RoleAdmin)(themeMux))
+	adminMux.Handle("/admin/themes/", middleware.RequireRole(auth.RoleAdmin)(themeMux))
 
 	protected := middleware.RequireAuth(deps.Auth, deps.CookieName, deps.DeviceCookieName, "/admin/login")(
 		middleware.RequireCSRF()(adminMux),

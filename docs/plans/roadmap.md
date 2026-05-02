@@ -101,6 +101,7 @@ Phase 1 (Foundation)
 
 | Spec | Description | Priority |
 |------|-------------|----------|
+| Admin UI Polish | Consistent styling pass across all admin views (users, devices, themes, widget selection): forms, tables, buttons, validation states, layout/spacing using existing CSS variables; admin landing page redesign | p1 |
 | Widget Selection per Screen | Enhanced per-screen widget config, screen templates | p1 |
 | Device Management | Admin view of connected devices, last-seen, force-refresh | p1 |
 | Config Export/Import | JSON export/import of screen configs for backup/migration | p2 |

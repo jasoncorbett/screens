@@ -15,6 +15,7 @@ Refinements to the admin experience, device management, and operational tooling.
 
 | ID | Title | Status | Priority |
 |----|-------|--------|----------|
+| | Admin UI Polish | | p1 |
 | | Enhanced Widget Selection | | p1 |
 | | Device Management | | p1 |
 | | Config Export/Import | | p2 |
@@ -25,7 +26,8 @@ Requires Phases 2-4.
 
 ## Exit Criteria
 
-1. Admin can manage per-screen widget configurations with an intuitive UI
-2. Admin can view connected devices, their status, and force-refresh them
-3. Screen configurations can be exported and imported as JSON
-4. All green-bar checks pass
+1. Admin views (users, devices, themes, widget selection) share a consistent, polished visual style
+2. Admin can manage per-screen widget configurations with an intuitive UI
+3. Admin can view connected devices, their status, and force-refresh them
+4. Screen configurations can be exported and imported as JSON
+5. All green-bar checks pass

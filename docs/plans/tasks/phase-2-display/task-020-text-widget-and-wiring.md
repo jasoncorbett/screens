@@ -3,7 +3,7 @@ id: TASK-020
 title: "Placeholder text widget, registry wiring through main.go and views.Deps"
 spec: SPEC-005
 arch: ARCH-005
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-019]
 skills: [add-widget, green-bar]

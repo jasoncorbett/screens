@@ -7,6 +7,7 @@ import (
 	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/middleware"
 	"github.com/jasoncorbett/screens/internal/themes"
+	"github.com/jasoncorbett/screens/internal/widget"
 )
 
 type routeRegistrationFunc func(router *http.ServeMux)
@@ -27,6 +28,7 @@ type Deps struct {
 	DeviceLandingURL string
 	SecureCookie     bool
 	Themes           *themes.Service
+	Widgets          *widget.Registry
 }
 
 // AddRoutes registers all view routes on the given mux.

@@ -3,7 +3,7 @@ id: TASK-019
 title: "Widget interface, registration struct, and registry"
 spec: SPEC-005
 arch: ARCH-005
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-store, green-bar]

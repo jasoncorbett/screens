@@ -2,7 +2,7 @@
 id: SPEC-004
 title: "Theme System"
 phase: 2
-status: draft
+status: accepted
 priority: p0
 created: 2026-04-30
 author: pm

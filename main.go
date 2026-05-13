@@ -18,6 +18,9 @@ import (
 	"github.com/jasoncorbett/screens/internal/logging"
 	"github.com/jasoncorbett/screens/internal/themes"
 	"github.com/jasoncorbett/screens/internal/version"
+	"github.com/jasoncorbett/screens/internal/widget"
+
+	_ "github.com/jasoncorbett/screens/internal/widget/text" // registers the placeholder text widget at startup
 
 	"github.com/jasoncorbett/screens/views"
 )
@@ -94,6 +97,7 @@ func main() {
 		DeviceLandingURL: cfg.Auth.DeviceLandingURL,
 		SecureCookie:     !cfg.Log.DevMode,
 		Themes:           themesSvc,
+		Widgets:          widget.Default(),
 	})
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler()))

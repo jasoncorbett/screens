@@ -187,14 +187,14 @@ func (q *Queries) ListWidgetInstancesByPageIDs(ctx context.Context, pageIds []st
 }
 
 const maxWidgetPosition = `-- name: MaxWidgetPosition :one
-SELECT COALESCE(MAX(position), 0) FROM widget_instances WHERE page_id = ?
+SELECT CAST(COALESCE(MAX(position), 0) AS INTEGER) FROM widget_instances WHERE page_id = ?
 `
 
-func (q *Queries) MaxWidgetPosition(ctx context.Context, pageID string) (interface{}, error) {
+func (q *Queries) MaxWidgetPosition(ctx context.Context, pageID string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, maxWidgetPosition, pageID)
-	var coalesce interface{}
-	err := row.Scan(&coalesce)
-	return coalesce, err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const setWidgetPosition = `-- name: SetWidgetPosition :exec

@@ -133,14 +133,14 @@ func (q *Queries) ListPagesByScreen(ctx context.Context, screenID string) ([]Pag
 }
 
 const maxPagePosition = `-- name: MaxPagePosition :one
-SELECT COALESCE(MAX(position), 0) FROM pages WHERE screen_id = ?
+SELECT CAST(COALESCE(MAX(position), 0) AS INTEGER) FROM pages WHERE screen_id = ?
 `
 
-func (q *Queries) MaxPagePosition(ctx context.Context, screenID string) (interface{}, error) {
+func (q *Queries) MaxPagePosition(ctx context.Context, screenID string) (int64, error) {
 	row := q.db.QueryRowContext(ctx, maxPagePosition, screenID)
-	var coalesce interface{}
-	err := row.Scan(&coalesce)
-	return coalesce, err
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const setPagePosition = `-- name: SetPagePosition :exec

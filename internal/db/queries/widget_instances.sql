@@ -20,7 +20,7 @@ WHERE page_id IN (sqlc.slice('page_ids'))
 ORDER BY page_id, position;
 
 -- name: MaxWidgetPosition :one
-SELECT COALESCE(MAX(position), 0) FROM widget_instances WHERE page_id = ?;
+SELECT CAST(COALESCE(MAX(position), 0) AS INTEGER) FROM widget_instances WHERE page_id = ?;
 
 -- name: DeleteWidgetInstance :execresult
 DELETE FROM widget_instances WHERE id = ? AND page_id = ?;

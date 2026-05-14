@@ -14,7 +14,7 @@ WHERE screen_id = ?
 ORDER BY position;
 
 -- name: MaxPagePosition :one
-SELECT COALESCE(MAX(position), 0) FROM pages WHERE screen_id = ?;
+SELECT CAST(COALESCE(MAX(position), 0) AS INTEGER) FROM pages WHERE screen_id = ?;
 
 -- name: UpdatePage :exec
 UPDATE pages SET name = ?, updated_at = datetime('now')

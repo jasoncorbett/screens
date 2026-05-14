@@ -3,7 +3,7 @@ id: TASK-021
 title: "Screen / Page / WidgetInstance migrations and sqlc queries"
 spec: SPEC-006
 arch: ARCH-006
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-migration, add-store, green-bar]

@@ -17,7 +17,7 @@ Build the screen, page, and widget infrastructure without specific widget implem
 |----|-------|--------|----------|
 | SPEC-004 | Theme System | accepted | p0 |
 | SPEC-005 | Widget Interface | accepted | p0 |
-| | Screen Model | | p0 |
+| SPEC-006 | Screen Model | draft | p0 |
 | | Screen Display | | p0 |
 | | Widget Selection UI | | p1 |
 | | Theme Preview | | p1 |

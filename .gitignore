@@ -1,6 +1,6 @@
 .env
 
-screens
+/screens
 
 *_templ.go
 static/**/*.gz

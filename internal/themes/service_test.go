@@ -643,6 +643,68 @@ func TestSetDefaultPreservesStateOnNotFound(t *testing.T) {
 	}
 }
 
+// TestDelete_RejectsThemeInUse verifies that deleting a non-default theme
+// referenced by a screen fails with ErrThemeInUse (the ON DELETE RESTRICT FK
+// fires) and leaves the theme row intact.
+func TestDelete_RejectsThemeInUse(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t, "default")
+	ctx := context.Background()
+
+	if err := svc.EnsureDefault(ctx); err != nil {
+		t.Fatalf("EnsureDefault: %v", err)
+	}
+	// Create a NON-default theme; the screen references it so the FK check
+	// (not the default-theme check) is what fires.
+	inUse, err := svc.Create(ctx, validInput("in-use"))
+	if err != nil {
+		t.Fatalf("Create in-use theme: %v", err)
+	}
+
+	if _, err := svc.sqlDB.ExecContext(ctx,
+		`INSERT INTO screens (id, name, theme_id, rotation_interval_seconds) VALUES (?, 'kitchen', ?, 30)`,
+		"screen-1", inUse.ID); err != nil {
+		t.Fatalf("insert screen: %v", err)
+	}
+
+	err = svc.Delete(ctx, inUse.ID)
+	if !errors.Is(err, ErrThemeInUse) {
+		t.Errorf("Delete returned %v, want ErrThemeInUse", err)
+	}
+
+	if _, err := svc.GetByID(ctx, inUse.ID); err != nil {
+		t.Errorf("theme is missing after refused delete: %v", err)
+	}
+}
+
+// TestDelete_RejectsDefaultBeforeFK verifies error ordering: when the default
+// theme is also referenced by a screen, the default-theme check fires before
+// the FK detection, so the caller sees ErrCannotDeleteDefault.
+func TestDelete_RejectsDefaultBeforeFK(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t, "default")
+	ctx := context.Background()
+
+	if err := svc.EnsureDefault(ctx); err != nil {
+		t.Fatalf("EnsureDefault: %v", err)
+	}
+	def, err := svc.GetDefault(ctx)
+	if err != nil {
+		t.Fatalf("GetDefault: %v", err)
+	}
+
+	if _, err := svc.sqlDB.ExecContext(ctx,
+		`INSERT INTO screens (id, name, theme_id, rotation_interval_seconds) VALUES (?, 'kitchen', ?, 30)`,
+		"screen-1", def.ID); err != nil {
+		t.Fatalf("insert screen: %v", err)
+	}
+
+	err = svc.Delete(ctx, def.ID)
+	if !errors.Is(err, ErrCannotDeleteDefault) {
+		t.Errorf("Delete returned %v, want ErrCannotDeleteDefault", err)
+	}
+}
+
 func TestListOrdering(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, "z-default")

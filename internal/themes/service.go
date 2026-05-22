@@ -23,6 +23,12 @@ var ErrCannotDeleteDefault = errors.New("cannot delete the default theme")
 // theme name.
 var ErrDuplicateName = errors.New("theme name already in use")
 
+// ErrThemeInUse is returned by Delete when the target theme is referenced by
+// at least one row in a foreign-key constrained table (currently:
+// screens.theme_id). The admin UI surfaces this as
+// "Cannot delete a theme in use by a screen".
+var ErrThemeInUse = errors.New("theme in use by one or more screens")
+
 // Default-theme color and font constants. These mirror the values baked into
 // static/css/app.css so that the seeded default theme matches the look that
 // the application ships with.
@@ -272,6 +278,9 @@ func (s *Service) Delete(ctx context.Context, id string) error {
 
 	res, err := s.queries.DeleteTheme(ctx, id)
 	if err != nil {
+		if isForeignKeyViolation(err) {
+			return ErrThemeInUse
+		}
 		return fmt.Errorf("delete theme: %w", err)
 	}
 	n, err := res.RowsAffected()
@@ -346,4 +355,15 @@ func isUniqueNameViolation(err error) bool {
 		return false
 	}
 	return strings.Contains(err.Error(), "UNIQUE constraint failed: themes.name")
+}
+
+// isForeignKeyViolation reports whether err is a SQLite FOREIGN KEY constraint
+// failure. Detected via substring match for the same reason as
+// isUniqueNameViolation: the modernc.org/sqlite driver does not expose a
+// stable error code via errors.Is.
+func isForeignKeyViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "FOREIGN KEY constraint failed")
 }

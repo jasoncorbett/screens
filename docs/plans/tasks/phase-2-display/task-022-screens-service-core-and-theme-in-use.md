@@ -3,7 +3,7 @@ id: TASK-022
 title: "screens.Service core: domain types, validation, Screen CRUD, GetScreenFull, themes.ErrThemeInUse"
 spec: SPEC-006
 arch: ARCH-006
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-021]
 skills: [add-store, green-bar]

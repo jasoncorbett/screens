@@ -6,6 +6,7 @@ import (
 
 	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/middleware"
+	"github.com/jasoncorbett/screens/internal/screens"
 	"github.com/jasoncorbett/screens/internal/themes"
 	"github.com/jasoncorbett/screens/internal/widget"
 )
@@ -29,6 +30,7 @@ type Deps struct {
 	SecureCookie     bool
 	Themes           *themes.Service
 	Widgets          *widget.Registry
+	Screens          *screens.Service
 }
 
 // AddRoutes registers all view routes on the given mux.
@@ -87,6 +89,23 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 	themeMux.HandleFunc("POST /admin/themes/{id}/set-default", handleThemeSetDefault(deps.Themes))
 	adminMux.Handle("/admin/themes", middleware.RequireRole(auth.RoleAdmin)(themeMux))
 	adminMux.Handle("/admin/themes/", middleware.RequireRole(auth.RoleAdmin)(themeMux))
+
+	// Screen management routes require admin role.
+	if deps.Screens != nil {
+		screenMux := http.NewServeMux()
+		screenMux.HandleFunc("GET /admin/screens", handleScreenList(deps.Screens, deps.Themes))
+		screenMux.HandleFunc("POST /admin/screens", handleScreenCreate(deps.Screens))
+		screenMux.HandleFunc("GET /admin/screens/{id}/edit", handleScreenEditForm(deps.Screens, deps.Themes))
+		screenMux.HandleFunc("POST /admin/screens/{id}", handleScreenUpdate(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/delete", handleScreenDelete(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages", handlePageCreate(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}", handlePageUpdate(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/delete", handlePageDelete(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/move-up", handlePageMoveUp(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/move-down", handlePageMoveDown(deps.Screens))
+		adminMux.Handle("/admin/screens", middleware.RequireRole(auth.RoleAdmin)(screenMux))
+		adminMux.Handle("/admin/screens/", middleware.RequireRole(auth.RoleAdmin)(screenMux))
+	}
 
 	protected := middleware.RequireAuth(deps.Auth, deps.CookieName, deps.DeviceCookieName, "/admin/login")(
 		middleware.RequireCSRF()(adminMux),

@@ -238,6 +238,26 @@ func (s *Service) CreatePage(ctx context.Context, screenID, name string) (Page, 
 	return s.GetPageByID(ctx, screenID, id)
 }
 
+// ListPages returns the pages belonging to the named screen in position
+// order. The returned slice is non-nil (an empty slice on no rows). This
+// method does not verify that the screen exists; callers that need that
+// guarantee should call GetScreenByID first.
+func (s *Service) ListPages(ctx context.Context, screenID string) ([]Page, error) {
+	rows, err := s.queries.ListPagesByScreen(ctx, screenID)
+	if err != nil {
+		return nil, fmt.Errorf("list pages: %w", err)
+	}
+	out := make([]Page, 0, len(rows))
+	for _, row := range rows {
+		page, err := pageFromRow(row)
+		if err != nil {
+			return nil, fmt.Errorf("convert page: %w", err)
+		}
+		out = append(out, page)
+	}
+	return out, nil
+}
+
 // GetPageByID returns the page identified by (screenID, pageID). The screen
 // ID is required for defence-in-depth: the URL contains the screen ID, and
 // the service rejects a (screen, page) pair that does not match. Returns

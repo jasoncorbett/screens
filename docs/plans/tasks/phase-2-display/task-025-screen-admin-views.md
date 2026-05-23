@@ -3,7 +3,7 @@ id: TASK-025
 title: "Screen admin views (list + edit), route wiring, Deps, main.go integration, theme-in-use error UI"
 spec: SPEC-006
 arch: ARCH-006
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-023, TASK-024]
 skills: [add-view, green-bar]

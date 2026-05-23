@@ -1,0 +1,176 @@
+
+package views
+
+import (
+	"strconv"
+
+	"github.com/jasoncorbett/screens/internal/auth"
+	"github.com/jasoncorbett/screens/internal/screens"
+	"github.com/jasoncorbett/screens/internal/themes"
+)
+
+templ screensListPage(summaries []screens.ScreenSummary, currentUser *auth.User, csrfToken string, msg string, errMsg string, themesList []themes.Theme) {
+	@layout("Screens - screens") {
+		<div class="hero">
+			<h1>Screen Management</h1>
+			<p class="description"><a href="/admin/">Back to Admin</a></p>
+		</div>
+		if msg != "" {
+			<div class="card" role="status">
+				<p>{ msg }</p>
+			</div>
+		}
+		if errMsg != "" {
+			<div class="card" role="alert">
+				<p>{ errMsg }</p>
+			</div>
+		}
+		<section>
+			<div class="card">
+				<h2>Screens</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>Name</th>
+							<th>Theme</th>
+							<th>Pages</th>
+							<th>Rotation (s)</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, s := range summaries {
+							<tr>
+								<td>{ s.Name }</td>
+								<td>{ s.ThemeName }</td>
+								<td>{ strconv.Itoa(s.PageCount) }</td>
+								<td>{ strconv.Itoa(s.RotationIntervalSeconds) }</td>
+								<td>
+									<a href={ templ.SafeURL("/admin/screens/" + s.ID + "/edit") }>Edit</a>
+									<form method="POST" action={ templ.SafeURL("/admin/screens/" + s.ID + "/delete") } style="display:inline">
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Delete</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</section>
+		<section>
+			<div class="card">
+				<h2>New Screen</h2>
+				@screenForm("/admin/screens", "", "", 30, themesList, csrfToken)
+			</div>
+		</section>
+	}
+}
+
+templ screenEditPage(screen screens.Screen, pages []screens.Page, currentUser *auth.User, csrfToken string, msg string, errMsg string, themesList []themes.Theme) {
+	@layout("Edit Screen - screens") {
+		<div class="hero">
+			<h1>Edit Screen: { screen.Name }</h1>
+			<p class="description"><a href="/admin/screens">Back to Screens</a></p>
+		</div>
+		if msg != "" {
+			<div class="card" role="status">
+				<p>{ msg }</p>
+			</div>
+		}
+		if errMsg != "" {
+			<div class="card" role="alert">
+				<p>{ errMsg }</p>
+			</div>
+		}
+		<section>
+			<div class="card">
+				<h2>Screen Settings</h2>
+				@screenForm("/admin/screens/"+screen.ID, screen.Name, screen.ThemeID, screen.RotationIntervalSeconds, themesList, csrfToken)
+			</div>
+		</section>
+		<section>
+			<div class="card">
+				<h2>Pages</h2>
+				<table>
+					<thead>
+						<tr>
+							<th>Position</th>
+							<th>Name</th>
+							<th>Actions</th>
+						</tr>
+					</thead>
+					<tbody>
+						for _, p := range pages {
+							<tr>
+								<td>{ strconv.Itoa(p.Position) }</td>
+								<td>
+									if p.Name == "" {
+										<em>(no name)</em>
+									} else {
+										{ p.Name }
+									}
+								</td>
+								<td>
+									<form method="POST" action={ templ.SafeURL("/admin/screens/" + screen.ID + "/pages/" + p.ID + "/move-up") } style="display:inline">
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Move up</button>
+									</form>
+									<form method="POST" action={ templ.SafeURL("/admin/screens/" + screen.ID + "/pages/" + p.ID + "/move-down") } style="display:inline">
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Move down</button>
+									</form>
+									<a href={ templ.SafeURL("/admin/screens/" + screen.ID + "/pages/" + p.ID + "/edit") }>Edit</a>
+									<form method="POST" action={ templ.SafeURL("/admin/screens/" + screen.ID + "/pages/" + p.ID + "/delete") } style="display:inline">
+										<input type="hidden" name="_csrf" value={ csrfToken }/>
+										<button type="submit">Delete</button>
+									</form>
+								</td>
+							</tr>
+						}
+					</tbody>
+				</table>
+			</div>
+		</section>
+		<section>
+			<div class="card">
+				<h2>New Page</h2>
+				<form method="POST" action={ templ.SafeURL("/admin/screens/" + screen.ID + "/pages") }>
+					<input type="hidden" name="_csrf" value={ csrfToken }/>
+					<label>
+						Name (optional)
+						<input type="text" name="name"/>
+					</label>
+					<button type="submit">Add page</button>
+				</form>
+			</div>
+		</section>
+	}
+}
+
+templ screenForm(action string, name string, themeID string, rotation int, themesList []themes.Theme, csrfToken string) {
+	<form method="POST" action={ templ.SafeURL(action) }>
+		<input type="hidden" name="_csrf" value={ csrfToken }/>
+		<label>
+			Name
+			<input type="text" name="name" value={ name } required/>
+		</label>
+		<label>
+			Theme
+			<select name="theme_id" required>
+				for _, t := range themesList {
+					if t.ID == themeID || (themeID == "" && t.IsDefault) {
+						<option value={ t.ID } selected>{ t.Name }</option>
+					} else {
+						<option value={ t.ID }>{ t.Name }</option>
+					}
+				}
+			</select>
+		</label>
+		<label>
+			Rotation interval (seconds)
+			<input type="number" name="rotation_interval_seconds" min="5" max="3600" value={ strconv.Itoa(rotation) } required/>
+		</label>
+		<button type="submit">Save</button>
+	</form>
+}

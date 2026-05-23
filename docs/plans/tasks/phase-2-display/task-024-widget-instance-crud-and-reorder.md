@@ -3,7 +3,7 @@ id: TASK-024
 title: "screens.Service widget instance CRUD + reorder + registry validation"
 spec: SPEC-006
 arch: ARCH-006
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-022]
 skills: [add-store, green-bar]

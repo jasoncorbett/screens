@@ -375,6 +375,169 @@ func (s *Service) swapPage(ctx context.Context, screenID, pageID string, directi
 	return tx.Commit()
 }
 
+// AddWidget creates a widget instance on the named page using the widget
+// type's default config. The default config is round-tripped through
+// ValidateConfig before persistence to enforce the "default must validate"
+// property at write time. The new instance's position is max(existing
+// positions)+1 within the page, or 1 if the page has no widgets yet.
+// Returns ErrPageNotFound when the page does not exist (or does not belong
+// to the named screen), and ErrUnknownWidgetType when the type has no
+// registration in the widget registry.
+func (s *Service) AddWidget(ctx context.Context, screenID, pageID, widgetType string) (WidgetInstance, error) {
+	if _, err := s.GetPageByID(ctx, screenID, pageID); err != nil {
+		return WidgetInstance{}, err
+	}
+
+	reg, ok := s.widgets.Get(widgetType)
+	if !ok {
+		return WidgetInstance{}, ErrUnknownWidgetType
+	}
+
+	raw := reg.DefaultConfig()
+	if _, err := reg.ValidateConfig(raw); err != nil {
+		return WidgetInstance{}, fmt.Errorf("widget %q: default config failed validation: %w", widgetType, err)
+	}
+
+	maxPos, err := s.queries.MaxWidgetPosition(ctx, pageID)
+	if err != nil {
+		return WidgetInstance{}, fmt.Errorf("max widget position: %w", err)
+	}
+
+	id, err := generateID()
+	if err != nil {
+		return WidgetInstance{}, fmt.Errorf("generate widget id: %w", err)
+	}
+
+	if err := s.queries.CreateWidgetInstance(ctx, db.CreateWidgetInstanceParams{
+		ID:       id,
+		PageID:   pageID,
+		Type:     widgetType,
+		Config:   string(raw),
+		Position: maxPos + 1,
+	}); err != nil {
+		return WidgetInstance{}, fmt.Errorf("create widget instance: %w", err)
+	}
+
+	row, err := s.queries.GetWidgetInstanceByID(ctx, db.GetWidgetInstanceByIDParams{ID: id, PageID: pageID})
+	if err != nil {
+		return WidgetInstance{}, fmt.Errorf("get widget instance: %w", err)
+	}
+	w, err := widgetFromRow(row)
+	if err != nil {
+		return WidgetInstance{}, fmt.Errorf("convert widget instance: %w", err)
+	}
+	return w, nil
+}
+
+// DeleteWidget removes the named widget instance. The screenID parameter is
+// validated upstream (via GetPageByID) for defence-in-depth; the URL
+// contains the screen ID, and the service rejects a stale (screen, page)
+// pair before touching widget rows. Returns ErrPageNotFound when the page
+// does not exist, ErrWidgetNotFound when no widget row matches.
+func (s *Service) DeleteWidget(ctx context.Context, screenID, pageID, widgetID string) error {
+	if _, err := s.GetPageByID(ctx, screenID, pageID); err != nil {
+		return err
+	}
+
+	res, err := s.queries.DeleteWidgetInstance(ctx, db.DeleteWidgetInstanceParams{ID: widgetID, PageID: pageID})
+	if err != nil {
+		return fmt.Errorf("delete widget instance: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete widget instance rows: %w", err)
+	}
+	if n == 0 {
+		return ErrWidgetNotFound
+	}
+	return nil
+}
+
+// MoveWidgetUp swaps the named widget instance with the instance immediately
+// above it within the same page. Returns nil (no-op) when the widget is
+// already at the top. Returns ErrPageNotFound when the page does not exist,
+// ErrWidgetNotFound when no widget row matches. The swap runs inside a
+// single transaction using the negative-position idiom (mirroring
+// MovePageUp) to avoid violating the UNIQUE(page_id, position) constraint
+// mid-swap.
+func (s *Service) MoveWidgetUp(ctx context.Context, screenID, pageID, widgetID string) error {
+	return s.swapWidget(ctx, screenID, pageID, widgetID, -1)
+}
+
+// MoveWidgetDown swaps the named widget instance with the instance
+// immediately below it within the same page. Returns nil (no-op) when the
+// widget is already at the bottom. Returns ErrPageNotFound when the page
+// does not exist, ErrWidgetNotFound when no widget row matches.
+func (s *Service) MoveWidgetDown(ctx context.Context, screenID, pageID, widgetID string) error {
+	return s.swapWidget(ctx, screenID, pageID, widgetID, +1)
+}
+
+// swapWidget implements MoveWidgetUp / MoveWidgetDown. direction is -1 to
+// swap with the neighbour above, +1 to swap with the neighbour below.
+func (s *Service) swapWidget(ctx context.Context, screenID, pageID, widgetID string, direction int) error {
+	if _, err := s.GetPageByID(ctx, screenID, pageID); err != nil {
+		return err
+	}
+
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin reorder tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	qtx := s.queries.WithTx(tx)
+
+	target, err := qtx.GetWidgetInstanceByID(ctx, db.GetWidgetInstanceByIDParams{ID: widgetID, PageID: pageID})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrWidgetNotFound
+		}
+		return fmt.Errorf("lookup widget instance: %w", err)
+	}
+
+	neighbor, err := qtx.GetWidgetNeighbor(ctx, db.GetWidgetNeighborParams{
+		PageID:   pageID,
+		Position: target.Position + int64(direction),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// No neighbour in that direction: already at the edge. Commit
+			// the (empty) transaction so the connection's lock releases
+			// cleanly and return nil.
+			return tx.Commit()
+		}
+		return fmt.Errorf("lookup neighbour: %w", err)
+	}
+
+	// Step 1: park target at -target.Position (guaranteed unique, since real
+	// positions are always positive).
+	if err := qtx.SetWidgetPosition(ctx, db.SetWidgetPositionParams{
+		Position: -target.Position,
+		ID:       target.ID,
+		PageID:   pageID,
+	}); err != nil {
+		return fmt.Errorf("park target position: %w", err)
+	}
+	// Step 2: move the neighbour into the target's old position.
+	if err := qtx.SetWidgetPosition(ctx, db.SetWidgetPositionParams{
+		Position: target.Position,
+		ID:       neighbor.ID,
+		PageID:   pageID,
+	}); err != nil {
+		return fmt.Errorf("move neighbour: %w", err)
+	}
+	// Step 3: move the target into the neighbour's old position.
+	if err := qtx.SetWidgetPosition(ctx, db.SetWidgetPositionParams{
+		Position: neighbor.Position,
+		ID:       target.ID,
+		PageID:   pageID,
+	}); err != nil {
+		return fmt.Errorf("move target: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // GetScreenFull returns the screen, its theme, its pages in position order,
 // and each page's widget instances in position order. Used by Screen Display.
 // Returns ErrScreenNotFound when the screen id has no row.

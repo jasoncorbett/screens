@@ -199,6 +199,182 @@ func (s *Service) DeleteScreen(ctx context.Context, id string) error {
 	return nil
 }
 
+// CreatePage validates the name and inserts a new page row on the named
+// screen. The new page's position is max(existing positions)+1, or 1 if no
+// pages exist on the screen. Returns *ValidationError on a malformed name,
+// ErrScreenNotFound if the screen does not exist.
+func (s *Service) CreatePage(ctx context.Context, screenID, name string) (Page, error) {
+	cleanName, err := validatePageName(name)
+	if err != nil {
+		return Page{}, &ValidationError{Fields: map[string]string{"name": err.Error()}}
+	}
+
+	if _, err := s.queries.GetScreenByID(ctx, screenID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Page{}, ErrScreenNotFound
+		}
+		return Page{}, fmt.Errorf("lookup screen: %w", err)
+	}
+
+	maxPos, err := s.queries.MaxPagePosition(ctx, screenID)
+	if err != nil {
+		return Page{}, fmt.Errorf("max page position: %w", err)
+	}
+
+	id, err := generateID()
+	if err != nil {
+		return Page{}, fmt.Errorf("generate page id: %w", err)
+	}
+
+	if err := s.queries.CreatePage(ctx, db.CreatePageParams{
+		ID:       id,
+		ScreenID: screenID,
+		Name:     cleanName,
+		Position: maxPos + 1,
+	}); err != nil {
+		return Page{}, fmt.Errorf("create page: %w", err)
+	}
+
+	return s.GetPageByID(ctx, screenID, id)
+}
+
+// GetPageByID returns the page identified by (screenID, pageID). The screen
+// ID is required for defence-in-depth: the URL contains the screen ID, and
+// the service rejects a (screen, page) pair that does not match. Returns
+// ErrPageNotFound when no row matches.
+func (s *Service) GetPageByID(ctx context.Context, screenID, pageID string) (Page, error) {
+	row, err := s.queries.GetPageByID(ctx, db.GetPageByIDParams{ID: pageID, ScreenID: screenID})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Page{}, ErrPageNotFound
+		}
+		return Page{}, fmt.Errorf("get page: %w", err)
+	}
+	page, err := pageFromRow(row)
+	if err != nil {
+		return Page{}, fmt.Errorf("convert page: %w", err)
+	}
+	return page, nil
+}
+
+// UpdatePage validates the name and updates the existing page row. Returns
+// *ValidationError on a malformed name, ErrPageNotFound when no row matches.
+func (s *Service) UpdatePage(ctx context.Context, screenID, pageID, name string) (Page, error) {
+	cleanName, err := validatePageName(name)
+	if err != nil {
+		return Page{}, &ValidationError{Fields: map[string]string{"name": err.Error()}}
+	}
+
+	if _, err := s.GetPageByID(ctx, screenID, pageID); err != nil {
+		return Page{}, err
+	}
+
+	if err := s.queries.UpdatePage(ctx, db.UpdatePageParams{
+		Name:     cleanName,
+		ID:       pageID,
+		ScreenID: screenID,
+	}); err != nil {
+		return Page{}, fmt.Errorf("update page: %w", err)
+	}
+
+	return s.GetPageByID(ctx, screenID, pageID)
+}
+
+// DeletePage removes a page and (via DB-layer CASCADE) its widget instances.
+// Returns ErrPageNotFound when no row matches.
+func (s *Service) DeletePage(ctx context.Context, screenID, pageID string) error {
+	res, err := s.queries.DeletePage(ctx, db.DeletePageParams{ID: pageID, ScreenID: screenID})
+	if err != nil {
+		return fmt.Errorf("delete page: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("delete page rows: %w", err)
+	}
+	if n == 0 {
+		return ErrPageNotFound
+	}
+	return nil
+}
+
+// MovePageUp swaps the named page with the page immediately above it within
+// the same screen. Returns nil (no-op) when the page is already at the top.
+// Returns ErrPageNotFound when no row matches. The swap runs inside a single
+// transaction using the negative-position idiom to avoid violating the
+// UNIQUE(screen_id, position) constraint mid-swap.
+func (s *Service) MovePageUp(ctx context.Context, screenID, pageID string) error {
+	return s.swapPage(ctx, screenID, pageID, -1)
+}
+
+// MovePageDown swaps the named page with the page immediately below it
+// within the same screen. Returns nil (no-op) when the page is already at
+// the bottom. Returns ErrPageNotFound when no row matches.
+func (s *Service) MovePageDown(ctx context.Context, screenID, pageID string) error {
+	return s.swapPage(ctx, screenID, pageID, +1)
+}
+
+// swapPage implements MovePageUp / MovePageDown. direction is -1 to swap
+// with the neighbour above, +1 to swap with the neighbour below.
+func (s *Service) swapPage(ctx context.Context, screenID, pageID string, direction int) error {
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin reorder tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	qtx := s.queries.WithTx(tx)
+
+	target, err := qtx.GetPageByID(ctx, db.GetPageByIDParams{ID: pageID, ScreenID: screenID})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrPageNotFound
+		}
+		return fmt.Errorf("lookup page: %w", err)
+	}
+
+	neighbor, err := qtx.GetPageNeighbor(ctx, db.GetPageNeighborParams{
+		ScreenID: screenID,
+		Position: target.Position + int64(direction),
+	})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			// No neighbour in that direction: already at the edge. Commit
+			// the (empty) transaction so the connection's lock releases
+			// cleanly and return nil.
+			return tx.Commit()
+		}
+		return fmt.Errorf("lookup neighbour: %w", err)
+	}
+
+	// Step 1: park target at -target.Position (guaranteed unique, since real
+	// positions are always positive).
+	if err := qtx.SetPagePosition(ctx, db.SetPagePositionParams{
+		Position: -target.Position,
+		ID:       target.ID,
+		ScreenID: screenID,
+	}); err != nil {
+		return fmt.Errorf("park target position: %w", err)
+	}
+	// Step 2: move the neighbour into the target's old position.
+	if err := qtx.SetPagePosition(ctx, db.SetPagePositionParams{
+		Position: target.Position,
+		ID:       neighbor.ID,
+		ScreenID: screenID,
+	}); err != nil {
+		return fmt.Errorf("move neighbour: %w", err)
+	}
+	// Step 3: move the target into the neighbour's old position.
+	if err := qtx.SetPagePosition(ctx, db.SetPagePositionParams{
+		Position: neighbor.Position,
+		ID:       target.ID,
+		ScreenID: screenID,
+	}); err != nil {
+		return fmt.Errorf("move target: %w", err)
+	}
+
+	return tx.Commit()
+}
+
 // GetScreenFull returns the screen, its theme, its pages in position order,
 // and each page's widget instances in position order. Used by Screen Display.
 // Returns ErrScreenNotFound when the screen id has no row.

@@ -3,7 +3,7 @@ id: TASK-023
 title: "screens.Service Page CRUD + reorder (transactional swap)"
 spec: SPEC-006
 arch: ARCH-006
-status: ready
+status: review
 priority: p0
 prerequisites: [TASK-022]
 skills: [add-store, green-bar]

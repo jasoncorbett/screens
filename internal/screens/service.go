@@ -258,6 +258,30 @@ func (s *Service) ListPages(ctx context.Context, screenID string) ([]Page, error
 	return out, nil
 }
 
+// ListWidgetInstancesByPage returns the widget instances belonging to the
+// named page in position order. The page is looked up first via GetPageByID
+// (defence-in-depth on the (screen, page) pair); ErrPageNotFound bubbles up
+// when the page does not exist or does not belong to the named screen. The
+// returned slice is non-nil (an empty slice on no rows).
+func (s *Service) ListWidgetInstancesByPage(ctx context.Context, screenID, pageID string) ([]WidgetInstance, error) {
+	if _, err := s.GetPageByID(ctx, screenID, pageID); err != nil {
+		return nil, err
+	}
+	rows, err := s.queries.ListWidgetInstancesByPage(ctx, pageID)
+	if err != nil {
+		return nil, fmt.Errorf("list widget instances: %w", err)
+	}
+	out := make([]WidgetInstance, 0, len(rows))
+	for _, row := range rows {
+		w, err := widgetFromRow(row)
+		if err != nil {
+			return nil, fmt.Errorf("convert widget instance: %w", err)
+		}
+		out = append(out, w)
+	}
+	return out, nil
+}
+
 // GetPageByID returns the page identified by (screenID, pageID). The screen
 // ID is required for defence-in-depth: the URL contains the screen ID, and
 // the service rejects a (screen, page) pair that does not match. Returns

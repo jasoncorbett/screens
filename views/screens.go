@@ -11,6 +11,7 @@ import (
 	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/screens"
 	"github.com/jasoncorbett/screens/internal/themes"
+	"github.com/jasoncorbett/screens/internal/widget"
 )
 
 // screenMsgText maps a flash code to a user-visible status message. Returns an
@@ -32,9 +33,28 @@ func screenMsgText(code string) string {
 		return "Page deleted."
 	case "page_moved":
 		return "Page reordered."
+	case "widget_added":
+		return "Widget added."
+	case "widget_deleted":
+		return "Widget removed."
+	case "widget_moved":
+		return "Widget reordered."
 	default:
 		return ""
 	}
+}
+
+// widgetDisplayName returns the DisplayName for the widget type from the
+// registrations slice, or the raw type string if no registration matches.
+// The fallback covers the edge case where a widget type was deregistered
+// but rows still exist in the database.
+func widgetDisplayName(registrations []widget.Registration, typeName string) string {
+	for _, reg := range registrations {
+		if reg.Type == typeName {
+			return reg.DisplayName
+		}
+	}
+	return typeName
 }
 
 // screenInputFromForm extracts a screens.ScreenInput from the form values.
@@ -449,5 +469,227 @@ func handlePageMoveDown(svc *screens.Service) http.HandlerFunc {
 
 		slog.Info("page moved down", "screen_id", screenID, "page_id", pageID, "moved_by", user.Email)
 		http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?msg=page_moved", http.StatusFound)
+	}
+}
+
+func handlePageEditForm(svc *screens.Service, registry *widget.Registry) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := auth.UserFromContext(ctx)
+		session := auth.SessionFromContext(ctx)
+
+		if user == nil || session == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		screenID := r.PathValue("id")
+		pageID := r.PathValue("pageID")
+		if screenID == "" || pageID == "" {
+			http.Redirect(w, r, "/admin/screens?error=Missing+page+ID", http.StatusFound)
+			return
+		}
+
+		screen, err := svc.GetScreenByID(ctx, screenID)
+		if err != nil {
+			if errors.Is(err, screens.ErrScreenNotFound) {
+				http.Redirect(w, r, "/admin/screens?error=Screen+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("get screen for page edit", "err", err, "screen_id", screenID)
+			http.Redirect(w, r, "/admin/screens?error=Could+not+load+screen", http.StatusFound)
+			return
+		}
+
+		page, err := svc.GetPageByID(ctx, screenID, pageID)
+		if err != nil {
+			if errors.Is(err, screens.ErrPageNotFound) {
+				http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Page+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("get page for edit", "err", err, "screen_id", screenID, "page_id", pageID)
+			http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Could+not+load+page", http.StatusFound)
+			return
+		}
+
+		widgets, err := svc.ListWidgetInstancesByPage(ctx, screenID, pageID)
+		if err != nil {
+			if errors.Is(err, screens.ErrPageNotFound) {
+				http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Page+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("list widgets for page edit", "err", err, "screen_id", screenID, "page_id", pageID)
+			http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Could+not+load+widgets", http.StatusFound)
+			return
+		}
+
+		registrations := registry.List()
+
+		msgCode := r.URL.Query().Get("msg")
+		errMsg := r.URL.Query().Get("error")
+
+		pageEditPage(screen, page, widgets, registrations, user, session.CSRFToken, screenMsgText(msgCode), errMsg).Render(ctx, w)
+	}
+}
+
+func handleWidgetCreate(svc *screens.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := auth.UserFromContext(ctx)
+		if user == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		screenID := r.PathValue("id")
+		pageID := r.PathValue("pageID")
+		if screenID == "" || pageID == "" {
+			http.Redirect(w, r, "/admin/screens?error=Missing+page+ID", http.StatusFound)
+			return
+		}
+
+		widgetType := r.FormValue("type")
+		pageEditURL := "/admin/screens/" + screenID + "/pages/" + pageID + "/edit"
+		if widgetType == "" {
+			http.Redirect(w, r, pageEditURL+"?error=Widget+type+is+required", http.StatusFound)
+			return
+		}
+
+		widget, err := svc.AddWidget(ctx, screenID, pageID, widgetType)
+		if err != nil {
+			if errors.Is(err, screens.ErrUnknownWidgetType) {
+				http.Redirect(w, r, pageEditURL+"?error=Unknown+widget+type", http.StatusFound)
+				return
+			}
+			if errors.Is(err, screens.ErrPageNotFound) {
+				http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Page+not+found", http.StatusFound)
+				return
+			}
+			if errors.Is(err, screens.ErrScreenNotFound) {
+				http.Redirect(w, r, "/admin/screens?error=Screen+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("add widget", "err", err, "screen_id", screenID, "page_id", pageID, "type", widgetType)
+			http.Redirect(w, r, pageEditURL+"?error=Could+not+add+widget", http.StatusFound)
+			return
+		}
+
+		slog.Info("widget added", "screen_id", screenID, "page_id", pageID, "widget_id", widget.ID, "type", widget.Type, "added_by", user.Email)
+		http.Redirect(w, r, pageEditURL+"?msg=widget_added", http.StatusFound)
+	}
+}
+
+func handleWidgetDelete(svc *screens.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := auth.UserFromContext(ctx)
+		if user == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		screenID := r.PathValue("id")
+		pageID := r.PathValue("pageID")
+		widgetID := r.PathValue("widgetID")
+		if screenID == "" || pageID == "" || widgetID == "" {
+			http.Redirect(w, r, "/admin/screens?error=Missing+widget+ID", http.StatusFound)
+			return
+		}
+
+		pageEditURL := "/admin/screens/" + screenID + "/pages/" + pageID + "/edit"
+		if err := svc.DeleteWidget(ctx, screenID, pageID, widgetID); err != nil {
+			if errors.Is(err, screens.ErrWidgetNotFound) {
+				http.Redirect(w, r, pageEditURL+"?error=Widget+not+found", http.StatusFound)
+				return
+			}
+			if errors.Is(err, screens.ErrPageNotFound) {
+				http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Page+not+found", http.StatusFound)
+				return
+			}
+			if errors.Is(err, screens.ErrScreenNotFound) {
+				http.Redirect(w, r, "/admin/screens?error=Screen+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("delete widget", "err", err, "screen_id", screenID, "page_id", pageID, "widget_id", widgetID)
+			http.Redirect(w, r, pageEditURL+"?error=Could+not+delete+widget", http.StatusFound)
+			return
+		}
+
+		slog.Info("widget deleted", "screen_id", screenID, "page_id", pageID, "widget_id", widgetID, "deleted_by", user.Email)
+		http.Redirect(w, r, pageEditURL+"?msg=widget_deleted", http.StatusFound)
+	}
+}
+
+func handleWidgetMoveUp(svc *screens.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := auth.UserFromContext(ctx)
+		if user == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		screenID := r.PathValue("id")
+		pageID := r.PathValue("pageID")
+		widgetID := r.PathValue("widgetID")
+		if screenID == "" || pageID == "" || widgetID == "" {
+			http.Redirect(w, r, "/admin/screens?error=Missing+widget+ID", http.StatusFound)
+			return
+		}
+
+		pageEditURL := "/admin/screens/" + screenID + "/pages/" + pageID + "/edit"
+		if err := svc.MoveWidgetUp(ctx, screenID, pageID, widgetID); err != nil {
+			if errors.Is(err, screens.ErrWidgetNotFound) {
+				http.Redirect(w, r, pageEditURL+"?error=Widget+not+found", http.StatusFound)
+				return
+			}
+			if errors.Is(err, screens.ErrPageNotFound) {
+				http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Page+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("move widget up", "err", err, "screen_id", screenID, "page_id", pageID, "widget_id", widgetID)
+			http.Redirect(w, r, pageEditURL+"?error=Could+not+reorder+widget", http.StatusFound)
+			return
+		}
+
+		slog.Info("widget moved up", "screen_id", screenID, "page_id", pageID, "widget_id", widgetID, "moved_by", user.Email)
+		http.Redirect(w, r, pageEditURL+"?msg=widget_moved", http.StatusFound)
+	}
+}
+
+func handleWidgetMoveDown(svc *screens.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		user := auth.UserFromContext(ctx)
+		if user == nil {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		screenID := r.PathValue("id")
+		pageID := r.PathValue("pageID")
+		widgetID := r.PathValue("widgetID")
+		if screenID == "" || pageID == "" || widgetID == "" {
+			http.Redirect(w, r, "/admin/screens?error=Missing+widget+ID", http.StatusFound)
+			return
+		}
+
+		pageEditURL := "/admin/screens/" + screenID + "/pages/" + pageID + "/edit"
+		if err := svc.MoveWidgetDown(ctx, screenID, pageID, widgetID); err != nil {
+			if errors.Is(err, screens.ErrWidgetNotFound) {
+				http.Redirect(w, r, pageEditURL+"?error=Widget+not+found", http.StatusFound)
+				return
+			}
+			if errors.Is(err, screens.ErrPageNotFound) {
+				http.Redirect(w, r, "/admin/screens/"+screenID+"/edit?error=Page+not+found", http.StatusFound)
+				return
+			}
+			slog.Error("move widget down", "err", err, "screen_id", screenID, "page_id", pageID, "widget_id", widgetID)
+			http.Redirect(w, r, pageEditURL+"?error=Could+not+reorder+widget", http.StatusFound)
+			return
+		}
+
+		slog.Info("widget moved down", "screen_id", screenID, "page_id", pageID, "widget_id", widgetID, "moved_by", user.Email)
+		http.Redirect(w, r, pageEditURL+"?msg=widget_moved", http.StatusFound)
 	}
 }

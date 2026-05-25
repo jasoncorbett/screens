@@ -103,6 +103,11 @@ func registerAuthRoutes(mux *http.ServeMux, deps *Deps) {
 		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/delete", handlePageDelete(deps.Screens))
 		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/move-up", handlePageMoveUp(deps.Screens))
 		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/move-down", handlePageMoveDown(deps.Screens))
+		screenMux.HandleFunc("GET /admin/screens/{id}/pages/{pageID}/edit", handlePageEditForm(deps.Screens, deps.Widgets))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/widgets", handleWidgetCreate(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/widgets/{widgetID}/delete", handleWidgetDelete(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/widgets/{widgetID}/move-up", handleWidgetMoveUp(deps.Screens))
+		screenMux.HandleFunc("POST /admin/screens/{id}/pages/{pageID}/widgets/{widgetID}/move-down", handleWidgetMoveDown(deps.Screens))
 		adminMux.Handle("/admin/screens", middleware.RequireRole(auth.RoleAdmin)(screenMux))
 		adminMux.Handle("/admin/screens/", middleware.RequireRole(auth.RoleAdmin)(screenMux))
 	}

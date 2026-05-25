@@ -3,7 +3,7 @@ id: TASK-026
 title: "Page edit view + widget instance admin UI (add / delete / reorder)"
 spec: SPEC-006
 arch: ARCH-006
-status: review
+status: done
 priority: p0
 prerequisites: [TASK-025]
 skills: [add-view, green-bar]

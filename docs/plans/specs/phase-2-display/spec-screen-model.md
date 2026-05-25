@@ -2,7 +2,7 @@
 id: SPEC-006
 title: "Screen Model"
 phase: 2
-status: draft
+status: accepted
 priority: p0
 created: 2026-05-13
 author: pm

@@ -12,6 +12,7 @@ templ adminPage(email, displayName, csrfToken string, isAdmin bool) {
 				<p><a href="/admin/users">Manage Users</a></p>
 				<p><a href="/admin/devices">Manage Devices</a></p>
 				<p><a href="/admin/themes">Manage Themes</a></p>
+				<p><a href="/admin/screens">Manage Screens</a></p>
 			}
 			<form method="POST" action="/admin/logout">
 				<input type="hidden" name="_csrf" value={ csrfToken }/>

@@ -12,7 +12,10 @@ import (
 
 	"github.com/jasoncorbett/screens/internal/auth"
 	"github.com/jasoncorbett/screens/internal/db"
+	"github.com/jasoncorbett/screens/internal/screens"
 	"github.com/jasoncorbett/screens/internal/themes"
+	"github.com/jasoncorbett/screens/internal/widget"
+	"github.com/jasoncorbett/screens/internal/widget/text"
 )
 
 func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
@@ -31,6 +34,11 @@ func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
 	if err := themesSvc.EnsureDefault(context.Background()); err != nil {
 		t.Fatalf("seed default theme: %v", err)
 	}
+	registry := widget.NewRegistry()
+	if err := registry.Register(text.Registration()); err != nil {
+		t.Fatalf("register text widget: %v", err)
+	}
+	screensSvc := screens.NewService(sqlDB, themesSvc, registry)
 	q := db.New(sqlDB)
 	return &Deps{
 		Auth:             svc,
@@ -41,6 +49,8 @@ func newTestDeps(t *testing.T) (*Deps, *db.Queries) {
 		DeviceLandingURL: "/device/",
 		SecureCookie:     false,
 		Themes:           themesSvc,
+		Widgets:          registry,
+		Screens:          screensSvc,
 	}, q
 }
 

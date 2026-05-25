@@ -16,6 +16,7 @@ import (
 	"github.com/jasoncorbett/screens/internal/config"
 	"github.com/jasoncorbett/screens/internal/db"
 	"github.com/jasoncorbett/screens/internal/logging"
+	"github.com/jasoncorbett/screens/internal/screens"
 	"github.com/jasoncorbett/screens/internal/themes"
 	"github.com/jasoncorbett/screens/internal/version"
 	"github.com/jasoncorbett/screens/internal/widget"
@@ -85,6 +86,8 @@ func main() {
 		log.Fatalf("seed default theme: %v", err)
 	}
 
+	screensSvc := screens.NewService(sqlDB, themesSvc, widget.Default())
+
 	mux := http.NewServeMux()
 	api.AddRoutes(mux)
 
@@ -98,6 +101,7 @@ func main() {
 		SecureCookie:     !cfg.Log.DevMode,
 		Themes:           themesSvc,
 		Widgets:          widget.Default(),
+		Screens:          screensSvc,
 	})
 
 	mux.Handle("GET /static/", http.StripPrefix("/static/", staticHandler()))

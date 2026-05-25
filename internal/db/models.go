@@ -26,6 +26,24 @@ type Invitation struct {
 	CreatedAt string
 }
 
+type Page struct {
+	ID        string
+	ScreenID  string
+	Name      string
+	Position  int64
+	CreatedAt string
+	UpdatedAt string
+}
+
+type Screen struct {
+	ID                      string
+	Name                    string
+	ThemeID                 string
+	RotationIntervalSeconds int64
+	CreatedAt               string
+	UpdatedAt               string
+}
+
 type Session struct {
 	TokenHash string
 	UserID    string
@@ -59,4 +77,14 @@ type User struct {
 	Active      int64
 	CreatedAt   string
 	UpdatedAt   string
+}
+
+type WidgetInstance struct {
+	ID        string
+	PageID    string
+	Type      string
+	Config    string
+	Position  int64
+	CreatedAt string
+	UpdatedAt string
 }

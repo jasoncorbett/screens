@@ -260,6 +260,10 @@ func handleThemeDelete(themesSvc *themes.Service) http.HandlerFunc {
 				http.Redirect(w, r, "/admin/themes?error=Cannot+delete+the+default+theme", http.StatusFound)
 				return
 			}
+			if errors.Is(err, themes.ErrThemeInUse) {
+				http.Redirect(w, r, "/admin/themes?error=Cannot+delete+a+theme+in+use+by+a+screen", http.StatusFound)
+				return
+			}
 			slog.Error("delete theme", "err", err, "theme_id", id)
 			http.Redirect(w, r, "/admin/themes?error=Could+not+delete+theme", http.StatusFound)
 			return

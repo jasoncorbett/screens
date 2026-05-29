@@ -3,17 +3,17 @@ INSERT INTO devices (id, name, token_hash, created_by)
 VALUES (?, ?, ?, ?);
 
 -- name: GetDeviceByTokenHash :one
-SELECT id, name, token_hash, created_by, created_at, last_seen_at, revoked_at
+SELECT id, name, token_hash, created_by, created_at, last_seen_at, revoked_at, screen_id
 FROM devices
 WHERE token_hash = ?;
 
 -- name: GetDeviceByID :one
-SELECT id, name, token_hash, created_by, created_at, last_seen_at, revoked_at
+SELECT id, name, token_hash, created_by, created_at, last_seen_at, revoked_at, screen_id
 FROM devices
 WHERE id = ?;
 
 -- name: ListDevices :many
-SELECT id, name, token_hash, created_by, created_at, last_seen_at, revoked_at
+SELECT id, name, token_hash, created_by, created_at, last_seen_at, revoked_at, screen_id
 FROM devices
 ORDER BY created_at;
 
@@ -31,3 +31,8 @@ UPDATE devices
    SET token_hash = ?
  WHERE id = ?
    AND revoked_at IS NULL;
+
+-- name: AssignDeviceScreen :execresult
+UPDATE devices
+   SET screen_id = ?
+ WHERE id = ?;

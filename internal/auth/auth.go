@@ -465,6 +465,37 @@ func (s *Service) RotateDeviceToken(ctx context.Context, deviceID string) (strin
 	return rawToken, nil
 }
 
+// AssignDeviceToScreen sets the device's screen_id to the given screenID,
+// or clears it if screenID == "". The caller MUST have pre-validated that
+// a non-empty screenID resolves to an existing Screen (the auth package
+// does not depend on the screens package). The FK constraint at the DB
+// layer also catches an invalid screenID as a secondary defence.
+//
+// Returns ErrDeviceNotFound when the device id is unknown. Returns nil
+// on success (including when the assignment did not change -- a no-op
+// re-assign is not an error).
+func (s *Service) AssignDeviceToScreen(ctx context.Context, deviceID, screenID string) error {
+	var screenIDArg sql.NullString
+	if screenID != "" {
+		screenIDArg = sql.NullString{String: screenID, Valid: true}
+	}
+	res, err := s.queries.AssignDeviceScreen(ctx, db.AssignDeviceScreenParams{
+		ScreenID: screenIDArg,
+		ID:       deviceID,
+	})
+	if err != nil {
+		return fmt.Errorf("assign device screen: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("assign device screen rows: %w", err)
+	}
+	if n == 0 {
+		return ErrDeviceNotFound
+	}
+	return nil
+}
+
 // generateID creates a random hex-encoded ID (16 bytes = 32 chars).
 func generateID() (string, error) {
 	token, err := GenerateToken()

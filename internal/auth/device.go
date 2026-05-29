@@ -16,6 +16,7 @@ type Device struct {
 	CreatedAt  time.Time
 	LastSeenAt *time.Time
 	RevokedAt  *time.Time
+	ScreenID   *string
 }
 
 // IsRevoked reports whether the device has been revoked.
@@ -52,6 +53,11 @@ func deviceFromRow(row db.Device) (Device, error) {
 			return Device{}, err
 		}
 		dev.RevokedAt = &t
+	}
+
+	if row.ScreenID.Valid {
+		s := row.ScreenID.String
+		dev.ScreenID = &s
 	}
 
 	return dev, nil

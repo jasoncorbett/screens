@@ -2,12 +2,36 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
 	"github.com/jasoncorbett/screens/internal/db"
 )
+
+// seedTestScreen inserts a theme and a screen via raw SQL so device-assignment
+// tests can satisfy the screen_id FK without importing internal/screens (which
+// would create a package cycle: screens depends on auth).
+func seedTestScreen(t *testing.T, sqlDB *sql.DB, themeID, screenID, screenName string) {
+	t.Helper()
+	if _, err := sqlDB.Exec(
+		`INSERT INTO themes
+		 (id, name, is_default, color_bg, color_surface, color_border, color_text,
+		  color_text_muted, color_accent, font_family, font_family_mono, radius)
+		 VALUES (?, ?, 0, '#000000', '#111111', '#222222', '#ffffff',
+		         '#cccccc', '#7b93ff', 'system-ui', '', '10px')`,
+		themeID, themeID,
+	); err != nil {
+		t.Fatalf("seed theme %s: %v", themeID, err)
+	}
+	if _, err := sqlDB.Exec(
+		"INSERT INTO screens (id, name, theme_id, rotation_interval_seconds) VALUES (?, ?, ?, 30)",
+		screenID, screenName, themeID,
+	); err != nil {
+		t.Fatalf("seed screen %s: %v", screenID, err)
+	}
+}
 
 // newDeviceTestService builds a Service backed by a fresh in-memory database
 // and a creator user with the given role. The interval controls the
@@ -17,6 +41,16 @@ import (
 // connection its own private :memory: database; without this cap, parallel
 // goroutines that hit a fresh connection see "no such table: devices".
 func newDeviceTestService(t *testing.T, interval time.Duration) (*Service, *db.Queries, db.User) {
+	t.Helper()
+	svc, q, _, creator := newDeviceTestServiceWithDB(t, interval)
+	return svc, q, creator
+}
+
+// newDeviceTestServiceWithDB is the same as newDeviceTestService but also
+// returns the underlying *sql.DB so callers can drive raw SQL (e.g., to seed
+// a screen row that satisfies the screen_id FK without importing
+// internal/screens, which would create a package cycle).
+func newDeviceTestServiceWithDB(t *testing.T, interval time.Duration) (*Service, *db.Queries, *sql.DB, db.User) {
 	t.Helper()
 	sqlDB := db.OpenTestDB(t)
 	sqlDB.SetMaxOpenConns(1)
@@ -32,7 +66,7 @@ func newDeviceTestService(t *testing.T, interval time.Duration) (*Service, *db.Q
 	svc := NewService(sqlDB, cfg)
 	q := db.New(sqlDB)
 	creator := createTestUser(t, q, "creator@example.com", "admin")
-	return svc, q, creator
+	return svc, q, sqlDB, creator
 }
 
 func TestCreateDevice(t *testing.T) {
@@ -403,6 +437,135 @@ func TestRotateDeviceToken(t *testing.T) {
 		_, err = svc.RotateDeviceToken(context.Background(), dev.ID)
 		if !errors.Is(err, ErrDeviceNotFound) {
 			t.Errorf("RotateDeviceToken(revoked) = %v, want ErrDeviceNotFound", err)
+		}
+	})
+}
+
+// findDeviceByID is a tiny helper that scans ListDevices for a particular id.
+// We use ListDevices (rather than a direct DB read) so the test exercises the
+// same row-mapping path the rest of the codebase uses.
+func findDeviceByID(t *testing.T, svc *Service, id string) Device {
+	t.Helper()
+	devices, err := svc.ListDevices(context.Background())
+	if err != nil {
+		t.Fatalf("ListDevices: %v", err)
+	}
+	for _, d := range devices {
+		if d.ID == id {
+			return d
+		}
+	}
+	t.Fatalf("device %q not found in ListDevices result", id)
+	return Device{}
+}
+
+func TestAssignDeviceToScreen(t *testing.T) {
+	t.Parallel()
+
+	t.Run("assigns screen id and ListDevices reflects it", func(t *testing.T) {
+		t.Parallel()
+		svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		seedTestScreen(t, sqlDB, "theme-assign", "screen-assign", "screen-assign-name")
+
+		dev, _, err := svc.CreateDevice(context.Background(), "kitchen", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice: %v", err)
+		}
+		// Fresh device has no screen.
+		if dev.ScreenID != nil {
+			t.Fatalf("fresh device ScreenID = %v, want nil", dev.ScreenID)
+		}
+
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, "screen-assign"); err != nil {
+			t.Fatalf("AssignDeviceToScreen: %v", err)
+		}
+
+		got := findDeviceByID(t, svc, dev.ID)
+		if got.ScreenID == nil {
+			t.Fatalf("after assign, ScreenID = nil, want %q", "screen-assign")
+		}
+		if *got.ScreenID != "screen-assign" {
+			t.Errorf("ScreenID = %q, want %q", *got.ScreenID, "screen-assign")
+		}
+	})
+
+	t.Run("empty screen id clears existing assignment", func(t *testing.T) {
+		t.Parallel()
+		svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		seedTestScreen(t, sqlDB, "theme-clear", "screen-clear", "screen-clear-name")
+
+		dev, _, err := svc.CreateDevice(context.Background(), "clearable", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice: %v", err)
+		}
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, "screen-clear"); err != nil {
+			t.Fatalf("AssignDeviceToScreen(set): %v", err)
+		}
+		// Sanity: the assignment took.
+		got := findDeviceByID(t, svc, dev.ID)
+		if got.ScreenID == nil || *got.ScreenID != "screen-clear" {
+			t.Fatalf("pre-clear ScreenID = %+v, want %q", got.ScreenID, "screen-clear")
+		}
+
+		// Now clear with empty string.
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, ""); err != nil {
+			t.Fatalf("AssignDeviceToScreen(clear): %v", err)
+		}
+		got = findDeviceByID(t, svc, dev.ID)
+		if got.ScreenID != nil {
+			t.Errorf("post-clear ScreenID = %q, want nil", *got.ScreenID)
+		}
+	})
+
+	t.Run("unknown device id returns ErrDeviceNotFound", func(t *testing.T) {
+		t.Parallel()
+		svc, _, _ := newDeviceTestService(t, time.Minute)
+
+		err := svc.AssignDeviceToScreen(context.Background(), "no-such-device-id", "")
+		if !errors.Is(err, ErrDeviceNotFound) {
+			t.Errorf("AssignDeviceToScreen(unknown, empty) = %v, want ErrDeviceNotFound", err)
+		}
+
+		// Also covers the non-empty screen id path: the device lookup misses
+		// before the FK check ever fires.
+		err = svc.AssignDeviceToScreen(context.Background(), "no-such-device-id", "anything")
+		if !errors.Is(err, ErrDeviceNotFound) {
+			t.Errorf("AssignDeviceToScreen(unknown, nonempty) = %v, want ErrDeviceNotFound", err)
+		}
+	})
+
+	t.Run("screen delete cascades to NULL on every assigned device", func(t *testing.T) {
+		t.Parallel()
+		svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		seedTestScreen(t, sqlDB, "theme-casc", "screen-casc", "screen-casc-name")
+
+		devA, _, err := svc.CreateDevice(context.Background(), "cascade-a", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice(a): %v", err)
+		}
+		devB, _, err := svc.CreateDevice(context.Background(), "cascade-b", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice(b): %v", err)
+		}
+		if err := svc.AssignDeviceToScreen(context.Background(), devA.ID, "screen-casc"); err != nil {
+			t.Fatalf("AssignDeviceToScreen(a): %v", err)
+		}
+		if err := svc.AssignDeviceToScreen(context.Background(), devB.ID, "screen-casc"); err != nil {
+			t.Fatalf("AssignDeviceToScreen(b): %v", err)
+		}
+
+		// Delete the screen via raw SQL (we cannot import internal/screens).
+		if _, err := sqlDB.Exec("DELETE FROM screens WHERE id = ?", "screen-casc"); err != nil {
+			t.Fatalf("DELETE screen: %v", err)
+		}
+
+		gotA := findDeviceByID(t, svc, devA.ID)
+		if gotA.ScreenID != nil {
+			t.Errorf("device A ScreenID = %q after screen delete, want nil", *gotA.ScreenID)
+		}
+		gotB := findDeviceByID(t, svc, devB.ID)
+		if gotB.ScreenID != nil {
+			t.Errorf("device B ScreenID = %q after screen delete, want nil", *gotB.ScreenID)
 		}
 	})
 }

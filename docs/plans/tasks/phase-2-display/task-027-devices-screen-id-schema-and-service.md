@@ -3,7 +3,7 @@ id: TASK-027
 title: "devices.screen_id schema migration + sqlc regen + auth.Device.ScreenID + AssignDeviceToScreen service method"
 spec: SPEC-007
 arch: ARCH-007
-status: ready
+status: review
 priority: p0
 prerequisites: []
 skills: [add-migration, add-store, green-bar]

@@ -16,6 +16,7 @@ type Device struct {
 	CreatedAt  string
 	LastSeenAt sql.NullString
 	RevokedAt  sql.NullString
+	ScreenID   sql.NullString
 }
 
 type Invitation struct {

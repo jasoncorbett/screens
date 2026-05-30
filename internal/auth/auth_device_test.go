@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -568,4 +570,254 @@ func TestAssignDeviceToScreen(t *testing.T) {
 			t.Errorf("device B ScreenID = %q after screen delete, want nil", *gotB.ScreenID)
 		}
 	})
+}
+
+// TestAssignDeviceToScreen_AdversarialInputs pins the documented behaviour
+// of the service for unusual inputs the upcoming admin handler (TASK-029) and
+// render handler (TASK-030) will need to rely on.
+func TestAssignDeviceToScreen_AdversarialInputs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty deviceID returns ErrDeviceNotFound (does not no-op-update all rows)", func(t *testing.T) {
+		t.Parallel()
+		// Empty deviceID against a non-empty database. The UPDATE has WHERE
+		// id = ?; if some future change relaxed that, an empty string could
+		// match every row. The expected behaviour is zero rows affected ->
+		// ErrDeviceNotFound, and no other device is mutated.
+		svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		seedTestScreen(t, sqlDB, "theme-empty-id", "screen-empty-id", "screen-empty-id")
+		dev, _, err := svc.CreateDevice(context.Background(), "untouched", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice: %v", err)
+		}
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, "screen-empty-id"); err != nil {
+			t.Fatalf("seed-assign: %v", err)
+		}
+
+		err = svc.AssignDeviceToScreen(context.Background(), "", "")
+		if !errors.Is(err, ErrDeviceNotFound) {
+			t.Errorf("AssignDeviceToScreen(empty, empty) = %v, want ErrDeviceNotFound", err)
+		}
+		err = svc.AssignDeviceToScreen(context.Background(), "", "screen-empty-id")
+		if !errors.Is(err, ErrDeviceNotFound) {
+			t.Errorf("AssignDeviceToScreen(empty, nonempty) = %v, want ErrDeviceNotFound", err)
+		}
+
+		// The pre-existing device must STILL be assigned to its screen.
+		got := findDeviceByID(t, svc, dev.ID)
+		if got.ScreenID == nil || *got.ScreenID != "screen-empty-id" {
+			t.Errorf("pre-existing device assignment was mutated by empty-id call: ScreenID=%v", got.ScreenID)
+		}
+	})
+
+	t.Run("nonexistent screen ID returns a non-nil error (FK secondary defence)", func(t *testing.T) {
+		t.Parallel()
+		// The architecture (ADR-009 + task) treats the FK as a secondary
+		// defence: callers MUST pre-validate the screen exists. If a future
+		// change drops the FK, we want this test to FAIL loudly so the
+		// secondary defence is preserved. We do NOT pin the error type --
+		// the task documents that the caller pre-validates, so the wrapped
+		// constraint failure is acceptable here. We pin only "non-nil".
+		svc, _, _, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		dev, _, err := svc.CreateDevice(context.Background(), "fk-defence", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice: %v", err)
+		}
+
+		err = svc.AssignDeviceToScreen(context.Background(), dev.ID, "no-such-screen")
+		if err == nil {
+			t.Fatal("AssignDeviceToScreen(valid device, nonexistent screen) = nil, want a non-nil error from the FK secondary defence")
+		}
+
+		// And the device row must NOT have been updated.
+		got := findDeviceByID(t, svc, dev.ID)
+		if got.ScreenID != nil {
+			t.Errorf("device ScreenID = %q after rejected FK assign, want nil", *got.ScreenID)
+		}
+	})
+
+	t.Run("nonexistent screen ID error does not leak the screen id verbatim", func(t *testing.T) {
+		t.Parallel()
+		// Defence in depth: a future caller might log err.Error() at info
+		// level. If the FK constraint message ever started including the
+		// rejected value, a 1MB malicious screen id (or PII) would land in
+		// the log. SQLite's current behaviour is a constant-length
+		// "FOREIGN KEY constraint failed (787)" -- pin that.
+		svc, _, _, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		dev, _, err := svc.CreateDevice(context.Background(), "leak-check", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice: %v", err)
+		}
+		// A clearly-identifiable token that would be obvious if it leaked.
+		canary := "CANARY-DO-NOT-LEAK-THIS-STRING"
+		err = svc.AssignDeviceToScreen(context.Background(), dev.ID, canary)
+		if err == nil {
+			t.Fatal("expected error for nonexistent screen")
+		}
+		if strings.Contains(err.Error(), canary) {
+			t.Errorf("error message leaked the rejected screen id verbatim: %q", err.Error())
+		}
+	})
+
+	t.Run("idempotent: re-assigning the same screen succeeds; clearing already-cleared succeeds", func(t *testing.T) {
+		t.Parallel()
+		// SPEC-007 commentary + task R6 docstring: "a no-op re-assign is not
+		// an error". We pin that for both directions (set->set, clear->clear).
+		svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		seedTestScreen(t, sqlDB, "theme-idem", "screen-idem", "screen-idem")
+		dev, _, err := svc.CreateDevice(context.Background(), "idem", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice: %v", err)
+		}
+		// Clear-while-already-NULL must succeed.
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, ""); err != nil {
+			t.Errorf("first clear: %v", err)
+		}
+		// Assign, then re-assign same value.
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, "screen-idem"); err != nil {
+			t.Errorf("first assign: %v", err)
+		}
+		if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, "screen-idem"); err != nil {
+			t.Errorf("second assign (same value): %v", err)
+		}
+		got := findDeviceByID(t, svc, dev.ID)
+		if got.ScreenID == nil || *got.ScreenID != "screen-idem" {
+			t.Errorf("post-idempotent ScreenID = %v, want %q", got.ScreenID, "screen-idem")
+		}
+	})
+
+	t.Run("sql metacharacters in deviceID do not corrupt the UPDATE", func(t *testing.T) {
+		t.Parallel()
+		// The query is parameterized; this test pins that nothing slips
+		// through string concatenation. If any layer were to switch to
+		// fmt.Sprintf, this would either drop the devices table or report
+		// rows affected != 0 against an unrelated device.
+		svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+		seedTestScreen(t, sqlDB, "theme-sql", "screen-sql", "screen-sql")
+		safe, _, err := svc.CreateDevice(context.Background(), "safe", creator.ID)
+		if err != nil {
+			t.Fatalf("CreateDevice safe: %v", err)
+		}
+		if err := svc.AssignDeviceToScreen(context.Background(), safe.ID, "screen-sql"); err != nil {
+			t.Fatalf("safe assign: %v", err)
+		}
+
+		evil := "ev'il'); DROP TABLE devices;--"
+		err = svc.AssignDeviceToScreen(context.Background(), evil, "")
+		if !errors.Is(err, ErrDeviceNotFound) {
+			t.Errorf("AssignDeviceToScreen(evil, empty) = %v, want ErrDeviceNotFound", err)
+		}
+
+		// Pre-existing device must still be there and still assigned.
+		got := findDeviceByID(t, svc, safe.ID)
+		if got.ScreenID == nil || *got.ScreenID != "screen-sql" {
+			t.Errorf("safe device assignment mutated by metachar input: ScreenID=%v", got.ScreenID)
+		}
+	})
+}
+
+// TestValidateDeviceToken_ReturnsScreenIDAfterAssignment pins that the
+// GetDeviceByTokenHash SELECT includes screen_id and that the mapper preserves
+// it. The render handler (TASK-030) authenticates a device via its bearer
+// token and reads dev.ScreenID directly off the returned struct -- if the
+// SELECT list ever loses the column, every device silently appears
+// "unassigned" and the entire render pipeline degrades to the placeholder
+// without any test surface catching it.
+func TestValidateDeviceToken_ReturnsScreenIDAfterAssignment(t *testing.T) {
+	t.Parallel()
+	svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+	seedTestScreen(t, sqlDB, "theme-vt", "screen-vt", "screen-vt")
+	dev, rawToken, err := svc.CreateDevice(context.Background(), "vt-device", creator.ID)
+	if err != nil {
+		t.Fatalf("CreateDevice: %v", err)
+	}
+
+	// Before assignment, ValidateDeviceToken must return ScreenID=nil.
+	got, err := svc.ValidateDeviceToken(context.Background(), rawToken)
+	if err != nil {
+		t.Fatalf("ValidateDeviceToken before assign: %v", err)
+	}
+	if got.ScreenID != nil {
+		t.Errorf("pre-assign ValidateDeviceToken ScreenID = %q, want nil", *got.ScreenID)
+	}
+
+	// After assignment, the token-hash lookup must include screen_id.
+	if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, "screen-vt"); err != nil {
+		t.Fatalf("AssignDeviceToScreen: %v", err)
+	}
+	got, err = svc.ValidateDeviceToken(context.Background(), rawToken)
+	if err != nil {
+		t.Fatalf("ValidateDeviceToken after assign: %v", err)
+	}
+	if got.ScreenID == nil {
+		t.Fatal("post-assign ValidateDeviceToken ScreenID = nil; GetDeviceByTokenHash SELECT may have lost screen_id")
+	}
+	if *got.ScreenID != "screen-vt" {
+		t.Errorf("post-assign ScreenID = %q, want %q", *got.ScreenID, "screen-vt")
+	}
+
+	// And after clearing, it must go back to nil (i.e., NULL round-trips
+	// through ValidateDeviceToken, not just the original create path).
+	if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, ""); err != nil {
+		t.Fatalf("AssignDeviceToScreen clear: %v", err)
+	}
+	got, err = svc.ValidateDeviceToken(context.Background(), rawToken)
+	if err != nil {
+		t.Fatalf("ValidateDeviceToken after clear: %v", err)
+	}
+	if got.ScreenID != nil {
+		t.Errorf("post-clear ValidateDeviceToken ScreenID = %q, want nil", *got.ScreenID)
+	}
+}
+
+// TestAssignDeviceToScreen_Concurrent verifies the service serialises
+// concurrent assignments without deadlock or data race. The render handler
+// will be called concurrently by every paired device on a busy household; if
+// the admin reassigns a device while a render is in flight, the assign path
+// must not collide with the read path on the same row.
+func TestAssignDeviceToScreen_Concurrent(t *testing.T) {
+	t.Parallel()
+	svc, _, sqlDB, creator := newDeviceTestServiceWithDB(t, time.Minute)
+	seedTestScreen(t, sqlDB, "theme-cc", "screen-cc-A", "screen-cc-A")
+	if _, err := sqlDB.Exec(
+		"INSERT INTO screens (id, name, theme_id, rotation_interval_seconds) VALUES (?, ?, ?, 30)",
+		"screen-cc-B", "screen-cc-B", "theme-cc",
+	); err != nil {
+		t.Fatalf("seed second screen: %v", err)
+	}
+	dev, _, err := svc.CreateDevice(context.Background(), "concurrent", creator.ID)
+	if err != nil {
+		t.Fatalf("CreateDevice: %v", err)
+	}
+
+	const N = 32
+	var wg sync.WaitGroup
+	errCh := make(chan error, N)
+	for i := 0; i < N; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			screen := "screen-cc-A"
+			if i%2 == 0 {
+				screen = "screen-cc-B"
+			}
+			if err := svc.AssignDeviceToScreen(context.Background(), dev.ID, screen); err != nil {
+				errCh <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		t.Errorf("concurrent assign returned error: %v", err)
+	}
+
+	// The final value must be one of the two valid screens (not corrupted).
+	got := findDeviceByID(t, svc, dev.ID)
+	if got.ScreenID == nil {
+		t.Fatal("post-concurrent ScreenID = nil; race reverted the row")
+	}
+	if *got.ScreenID != "screen-cc-A" && *got.ScreenID != "screen-cc-B" {
+		t.Errorf("post-concurrent ScreenID = %q, want one of screen-cc-A or screen-cc-B", *got.ScreenID)
+	}
 }

@@ -449,6 +449,69 @@ func TestDeviceFromRow_MalformedRevokedAt(t *testing.T) {
 	}
 }
 
+// TestDeviceFromRow_ScreenIDMapping is a table-driven test that pins the
+// translation between sql.NullString and *string for the new ScreenID field.
+// The defensive case (Valid=false but String non-empty) is the one worth
+// guarding: a future refactor that drops the Valid check and reads
+// row.ScreenID.String directly would silently treat every unassigned device
+// as assigned to garbage. Every case here must round-trip cleanly.
+func TestDeviceFromRow_ScreenIDMapping(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   sql.NullString
+		want *string
+	}{
+		{
+			name: "valid=false, string empty -> nil",
+			in:   sql.NullString{Valid: false, String: ""},
+			want: nil,
+		},
+		{
+			name: "valid=false, string non-empty -> nil (defensive)",
+			in:   sql.NullString{Valid: false, String: "ghost-screen-id"},
+			want: nil,
+		},
+		{
+			name: "valid=true, normal value -> pointer to value",
+			in:   sql.NullString{Valid: true, String: "screen-abc"},
+			want: stringPtr("screen-abc"),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			row := db.Device{
+				ID:        "x",
+				Name:      "x",
+				TokenHash: "h",
+				CreatedBy: "u",
+				CreatedAt: "2026-04-25 10:00:00",
+				ScreenID:  tt.in,
+			}
+			got, err := deviceFromRow(row)
+			if err != nil {
+				t.Fatalf("deviceFromRow: %v", err)
+			}
+			switch {
+			case tt.want == nil && got.ScreenID == nil:
+				// ok
+			case tt.want == nil && got.ScreenID != nil:
+				t.Errorf("ScreenID = %q, want nil", *got.ScreenID)
+			case tt.want != nil && got.ScreenID == nil:
+				t.Errorf("ScreenID = nil, want %q", *tt.want)
+			case *tt.want != *got.ScreenID:
+				t.Errorf("ScreenID = %q, want %q", *got.ScreenID, *tt.want)
+			}
+		})
+	}
+}
+
+// stringPtr returns a pointer to its argument. Used by the table-driven
+// mapper test above so the literal values can sit in the table inline.
+func stringPtr(s string) *string {
+	return &s
+}
+
 // TestConcurrent_CreateDevice_50Goroutines exercises the race detector and
 // confirms 50 parallel CreateDevice calls all succeed with distinct tokens
 // and distinct ids. A bug in the random source or the ID generator would
